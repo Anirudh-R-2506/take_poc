@@ -1,0 +1,17 @@
+{
+  "name": "proctor_native",
+  "version": "1.0.0",
+  "description": "Native addon for Morpheus proctoring system",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "gypfile": true
+}

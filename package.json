@@ -1,0 +1,52 @@
+{
+  "name": "morpheus-proctoring-poc",
+  "productName": "Morpheus Proctoring System",
+  "version": "1.0.0",
+  "description": "Morpheus - Comprehensive Proctoring System PoC with 13 monitoring services",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "lint": "echo \"No linting configured\"",
+    "build-native": "cd morpheus/native && yarn install && yarn build",
+    "rebuild-electron": "yarn electron-rebuild -f -w proctor_native",
+    "setup-morpheus": "yarn build-native || echo 'Native build failed, will use fallback'",
+    "dev": "yarn setup-morpheus && yarn start",
+    "clean-native": "cd morpheus/native && yarn clean",
+    "install-deps": "yarn install && cd morpheus/native && yarn install",
+    "start-elevated": "chmod +x scripts/launch-elevated-mac.sh && scripts/launch-elevated-mac.sh",
+    "start-elevated-windows": "powershell -ExecutionPolicy Bypass -File scripts/launch-elevated-windows.ps1",
+    "start-elevated-dev": "chmod +x scripts/launch-elevated-mac.sh && scripts/launch-elevated-mac.sh dev",
+    "package-and-run-elevated": "yarn package && yarn start-elevated"
+  },
+  "keywords": [],
+  "author": {
+    "name": "Piko",
+    "email": "pikocanfly@gmail.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.1",
+    "@electron-forge/maker-deb": "^7.8.1",
+    "@electron-forge/maker-rpm": "^7.8.1",
+    "@electron-forge/maker-squirrel": "^7.8.1",
+    "@electron-forge/maker-zip": "^7.8.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
+    "@electron-forge/plugin-fuses": "^7.8.1",
+    "@electron-forge/plugin-vite": "^7.8.1",
+    "@electron/fuses": "^1.8.0",
+    "electron": "36.5.0",
+    "electron-rebuild": "^3.2.9",
+    "node-gyp": "^10.0.0",
+    "vite": "^5.4.19"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.5.2",
+    "electron-squirrel-startup": "^1.0.1",
+    "electron-sudo": "^4.0.12",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
