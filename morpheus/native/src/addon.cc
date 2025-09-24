@@ -894,6 +894,21 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
         }
     }));
 
+    exports.Set(Napi::String::New(env, "resetNotificationBlocking"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            if (!notification_blocker_instance) {
+                notification_blocker_instance = new NotificationBlocker();
+            }
+
+            bool success = notification_blocker_instance->ResetToOriginalState();
+            return Napi::Boolean::New(env, success);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error resetting notification blocking: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
     exports.Set(Napi::String::New(env, "detectNotificationViolation"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
         Napi::Env env = info.Env();
         try {

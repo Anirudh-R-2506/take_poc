@@ -40,6 +40,7 @@ public:
     // Main control methods
     bool EnableNotificationBlocking();
     bool DisableNotificationBlocking();
+    bool ResetToOriginalState();
     bool IsNotificationBlocked();
 
     // State monitoring

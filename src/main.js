@@ -219,6 +219,23 @@ const setupIPC = () => {
     }
   });
 
+  // Send command to specific worker
+  ipcMain.handle('proctor:send-worker-command', async (event, { workerName, command }) => {
+    try {
+      if (!proctorSupervisor) {
+        console.error('[Main IPC] ProctorSupervisor not initialized');
+        return false;
+      }
+
+      console.log(`[Main IPC] Sending command to worker ${workerName}:`, command);
+      const result = proctorSupervisor.sendCommand(workerName, command);
+      return result;
+    } catch (error) {
+      console.error(`[Main IPC] Error sending command to worker ${workerName}:`, error);
+      return false;
+    }
+  });
+
   // Note: Morpheus services are now handled via the ProctorSupervisor
   // All monitoring data comes through the worker events, not direct IPC calls
 

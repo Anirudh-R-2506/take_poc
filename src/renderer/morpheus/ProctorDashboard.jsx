@@ -119,6 +119,31 @@ const ProctorDashboard = () => {
     }
   }, []);
 
+  // Reset notification blocker to original state
+  const handleResetNotificationBlocker = useCallback(async () => {
+    try {
+      console.log(`[ProctorDashboard] Resetting notification blocker to original state...`);
+
+      // Send reset command to the notification-blocker worker
+      if (window.proctorAPI && window.proctorAPI.sendWorkerCommand) {
+        const success = await window.proctorAPI.sendWorkerCommand('notification-blocker-worker', {
+          cmd: 'resetToOriginal',
+          timestamp: Date.now()
+        });
+
+        if (success) {
+          console.log(`[ProctorDashboard] Reset command sent to notification blocker worker`);
+        } else {
+          console.error(`[ProctorDashboard] Failed to send reset command to notification blocker worker`);
+        }
+      } else {
+        console.error(`[ProctorDashboard] ProctorAPI not available for worker communication`);
+      }
+    } catch (error) {
+      console.error(`[ProctorDashboard] Error resetting notification blocker:`, error);
+    }
+  }, []);
+
   // Utility functions
   const formatTimestamp = useCallback((timestamp) => {
     if (!timestamp) return "Never";
@@ -627,6 +652,24 @@ const renderModuleSpecificData = (moduleName, data) => {
               </span>
             </div>
           )}
+          <div className="data-item" style={{ marginTop: "10px" }}>
+            <button
+              className="action-btn reset"
+              onClick={handleResetNotificationBlocker}
+              title="Reset notification blocking to original state"
+              style={{
+                backgroundColor: "#f39c12",
+                color: "white",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "0.8em"
+              }}
+            >
+              🔄 Reset to Original
+            </button>
+          </div>
         </>
       );
 

@@ -339,8 +339,65 @@ class NotificationBlockerWorker extends WorkerBase {
             case 'checkViolations':
                 this.checkNotificationStatus();
                 break;
+            case 'resetToOriginal':
+                this.resetToOriginalState();
+                break;
             default:
                 console.warn(`[${this.moduleName}] Unknown control message: ${message.cmd}`);
+        }
+    }
+
+    async resetToOriginalState() {
+        console.log(`[${this.moduleName}] Resetting notification blocking to original state...`);
+
+        try {
+            if (process.platform === 'darwin') {
+                // macOS: Disable Do Not Disturb to restore original state
+                await this.disableMacOSNotificationBlocking();
+            } else if (process.platform === 'win32') {
+                // Windows: Use native addon to reset Focus Assist
+                if (this.nativeAddon && typeof this.nativeAddon.resetNotificationBlocking === 'function') {
+                    const success = this.nativeAddon.resetNotificationBlocking();
+                    if (!success) {
+                        throw new Error('Failed to reset Windows Focus Assist to original state');
+                    }
+                    console.log(`[${this.moduleName}] Windows Focus Assist reset to original state successfully`);
+                } else {
+                    throw new Error('Windows notification blocking reset not available in native addon');
+                }
+            }
+
+            // Update internal state
+            this.isExamActive = false;
+
+            this.sendToParent({
+                type: 'proctor-event',
+                module: this.moduleName,
+                payload: {
+                    eventType: 'notification-blocking-reset',
+                    reason: 'manual-reset',
+                    isBlocked: false,
+                    examActive: false,
+                    timestamp: Date.now(),
+                    count: this.counter++,
+                    source: process.platform === 'darwin' ? 'dnd-module' : 'native'
+                }
+            });
+
+        } catch (error) {
+            console.error(`[${this.moduleName}] Failed to reset notification blocking:`, error.message);
+            this.sendToParent({
+                type: 'proctor-event',
+                module: this.moduleName,
+                payload: {
+                    eventType: 'error',
+                    reason: 'reset-failed',
+                    message: error.message,
+                    timestamp: Date.now(),
+                    count: this.counter++,
+                    source: 'worker'
+                }
+            });
         }
     }
 

@@ -319,6 +319,15 @@ module.exports = {
             };
         }
     },
+
+    resetNotificationBlocking: () => {
+        if (nativeAddon && nativeAddon.resetNotificationBlocking) {
+            return nativeAddon.resetNotificationBlocking();
+        } else {
+            console.warn('[ProctorNative] Notification blocking reset not available, no fallback implemented');
+            return false;
+        }
+    },
     
     // Focus Idle watcher specific functions
     startFocusIdleWatcher: (callback, options) => {

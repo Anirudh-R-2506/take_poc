@@ -38,7 +38,8 @@ contextBridge.exposeInMainWorld('proctorAPI', {
             'stop-worker',
             'start-worker',
             'start-all-workers',
-            'get-system-info'
+            'get-system-info',
+            'send-worker-command'
         ];
         
         if (!allowedCommands.includes(command.cmd)) {
@@ -97,6 +98,14 @@ contextBridge.exposeInMainWorld('proctorAPI', {
 
     startWorkers: () => {
         return ipcRenderer.invoke('proctor:start-workers');
+    },
+
+    // Send command to specific worker
+    sendWorkerCommand: (workerName, command) => {
+        if (typeof workerName !== 'string' || !command || typeof command !== 'object') {
+            return Promise.reject(new Error('Invalid worker command parameters'));
+        }
+        return ipcRenderer.invoke('proctor:send-worker-command', { workerName, command });
     }
 });
 
