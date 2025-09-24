@@ -6,14 +6,14 @@
         "src/addon.cc",
         "src/ProcessWatcher.cpp",
         "src/DeviceWatcher.cpp",
-        "src/VMDetector.cpp"
+        "src/VMDetector.cpp",
+        "src/NotificationBlocker.cpp"
       ],
       "conditions": [
         ["OS=='mac'", {
           "sources": [
             "src/PermissionChecker.mm",
             "src/ScreenWatcher_mac.mm",
-            "src/NotificationWatcher_mac.mm",
             "src/ClipboardWatcher_mac.mm",
             "src/FocusIdleWatcher_mac.mm",
             "src/BluetoothWatcher_mac.mm"
@@ -23,7 +23,6 @@
           "sources": [
             "src/PermissionChecker_win.cpp",
             "src/ScreenWatcher_win.cpp",
-            "src/NotificationWatcher_win.cpp",
             "src/ClipboardWatcher.cpp",
             "src/FocusIdleWatcher.cpp",
             "src/BluetoothWatcher_win.cpp"

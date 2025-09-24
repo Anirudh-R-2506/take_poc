@@ -518,14 +518,40 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
         NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
         NSRunningApplication* frontApp = [workspace frontmostApplication];
         NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
-        
+
         if (frontApp && currentApp) {
-            bool isFocused = [[frontApp bundleIdentifier] isEqualToString:[currentApp bundleIdentifier]];
-            // Additional check: ensure the frontmost app PID matches our current PID
-            return isFocused && ([frontApp processIdentifier] == [currentApp processIdentifier]);
+            // Primary check: PID comparison is most reliable
+            if ([frontApp processIdentifier] == [currentApp processIdentifier]) {
+                return true;
+            }
+
+            // Backup check: bundle identifier comparison
+            NSString* frontBundleId = [frontApp bundleIdentifier];
+            NSString* currentBundleId = [currentApp bundleIdentifier];
+
+            if (frontBundleId && currentBundleId) {
+                // Direct match
+                if ([frontBundleId isEqualToString:currentBundleId]) {
+                    return true;
+                }
+
+                // Check for Electron app patterns
+                if ([frontBundleId containsString:@"electron"] ||
+                    [frontBundleId isEqualToString:@"com.github.Electron"] ||
+                    [currentBundleId containsString:@"electron"] ||
+                    [currentBundleId isEqualToString:@"com.github.Electron"]) {
+                    // If either is Electron-related, check if they're both Electron apps
+                    bool frontIsElectron = [frontBundleId containsString:@"electron"] || [frontBundleId isEqualToString:@"com.github.Electron"];
+                    bool currentIsElectron = [currentBundleId containsString:@"electron"] || [currentBundleId isEqualToString:@"com.github.Electron"];
+
+                    if (frontIsElectron && currentIsElectron) {
+                        return true;
+                    }
+                }
+            }
         }
     }
-    
+
     // If we can't determine, assume not focused to be safe
     return false;
 }

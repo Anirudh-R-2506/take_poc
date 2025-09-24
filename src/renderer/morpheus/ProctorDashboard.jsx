@@ -135,6 +135,8 @@ const ProctorDashboard = () => {
     if (data.eventType === "notification-arrived") return "high";
     if (data.eventType === "clipboard-changed") return "high";
     if (data.eventType === "focus-lost") return "high";
+    if (data.eventType === "violation") return "high";
+    if (data.userModified === true) return "high";
     if (data.recordingProcesses && data.recordingProcesses.length > 0) return "high";
 
     // Medium threat indicators
@@ -251,7 +253,7 @@ const ProctorDashboard = () => {
     "device-watch",
     "bt-watch",
     "screen-watch",
-    "notification-watch",
+    "notification-blocker",
     "vm-detect",
     "clipboard-worker",
     "focus-idle-watch"
@@ -262,7 +264,7 @@ const ProctorDashboard = () => {
     "device-watch": "device-watch-worker",
     "bt-watch": "bt-watch-worker",
     "screen-watch": "screen-watch-worker",
-    "notification-watch": "notification-watch-worker",
+    "notification-blocker": "notification-blocker-worker",
     "vm-detect": "vm-detect-worker",
     "clipboard-worker": "clipboard-worker",
     "focus-idle-watch": "focus-idle-watch-worker"
@@ -592,22 +594,36 @@ const renderModuleSpecificData = (moduleName, data) => {
         </>
       );
 
-    case "notification-watch":
+    case "notification-blocker":
       return (
         <>
-          {data.sourceApp && (
+          <div className="data-item">
+            <span className="data-label">Status:</span>
+            <span className={`data-value ${data.isBlocked ? "normal" : "warning"}`}>
+              {data.isBlocked ? "Blocked" : "Enabled"}
+            </span>
+          </div>
+          {data.examActive !== undefined && (
             <div className="data-item">
-              <span className="data-label">Source App:</span>
-              <span className={`data-value ${data.eventType === "notification-arrived" ? "warning" : "normal"}`}>
-                {data.sourceApp}
+              <span className="data-label">Exam Mode:</span>
+              <span className={`data-value ${data.examActive ? "normal" : "warning"}`}>
+                {data.examActive ? "Active" : "Inactive"}
               </span>
             </div>
           )}
-          {data.title && (
+          {data.eventType === "violation" && (
             <div className="data-item">
-              <span className="data-label">Title:</span>
-              <span className="data-value">
-                {data.title.length > 30 ? data.title.substring(0, 30) + "..." : data.title}
+              <span className="data-label">Violation:</span>
+              <span className="data-value warning">
+                {data.violationType || "Settings Changed"}
+              </span>
+            </div>
+          )}
+          {data.reason && (
+            <div className="data-item">
+              <span className="data-label">Reason:</span>
+              <span className="data-value" style={{fontSize: "0.8em"}}>
+                {data.reason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
               </span>
             </div>
           )}

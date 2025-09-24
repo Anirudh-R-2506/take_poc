@@ -17,7 +17,7 @@ class ProctorSupervisor extends EventEmitter {
       "device-watch-worker", // External device monitoring
       "bt-watch-worker",
       "screen-watch-worker", // Includes recording/overlay detection
-      "notification-watch-worker",
+      "notification-blocker-worker",
       "vm-detect-worker",
       "clipboard-worker",
       "focus-idle-watch-worker",

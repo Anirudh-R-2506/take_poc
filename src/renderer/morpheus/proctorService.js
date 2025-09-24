@@ -165,7 +165,7 @@ class ProctorService {
             'device-watch': { name: 'Device Monitor', icon: '💾', color: '#1abc9c' },
             'bt-watch': { name: 'Bluetooth', icon: '📶', color: '#9b59b6' },
             'screen-watch': { name: 'Screen Monitor', icon: '🖥️', color: '#f39c12' },
-            'notification-watch': { name: 'Notifications', icon: '🔔', color: '#e67e22' },
+            'notification-blocker': { name: 'Notification Blocker', icon: '🔕', color: '#e67e22' },
             'vm-detect': { name: 'VM Detection', icon: '🖴', color: '#34495e' },
             'clipboard-worker': { name: 'Clipboard', icon: '📋', color: '#16a085' },
             'focus-idle-watch': { name: 'Focus & Idle Monitor', icon: '🎯', color: '#27ae60' },

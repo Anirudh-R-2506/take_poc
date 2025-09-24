@@ -3,7 +3,7 @@
 #include "DeviceWatcher.h"
 #include "ScreenWatcher.h"
 #include "VMDetector.h"
-#include "NotificationWatcher.h"
+#include "NotificationBlocker.h"
 #include "FocusIdleWatcher.h"
 #include "ClipboardWatcher.h"
 #include "BluetoothWatcher.h"
@@ -13,7 +13,7 @@ static ProcessWatcher* process_watcher_instance = nullptr;
 static DeviceWatcher* device_watcher_instance = nullptr;
 static ScreenWatcher* screen_watcher_instance = nullptr;
 static VMDetector* vm_detector_instance = nullptr;
-static NotificationWatcher* notification_watcher_instance = nullptr;
+static NotificationBlocker* notification_blocker_instance = nullptr;
 static FocusIdleWatcher* focus_idle_watcher_instance = nullptr;
 static ClipboardWatcher* clipboard_watcher_instance = nullptr;
 
@@ -377,99 +377,6 @@ Napi::Value DetectVirtualMachine(const Napi::CallbackInfo& info) {
     }
 }
 
-// Notification Watcher functions
-Napi::Value StartNotificationWatcher(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-    
-    if (info.Length() < 1 || !info[0].IsFunction()) {
-        Napi::TypeError::New(env, "Callback function expected").ThrowAsJavaScriptException();
-        return env.Null();
-    }
-    
-    if (notification_watcher_instance && notification_watcher_instance->IsRunning()) {
-        return Napi::Boolean::New(env, false); // Already running
-    }
-    
-    if (!notification_watcher_instance) {
-        notification_watcher_instance = new NotificationWatcher();
-    }
-    
-    // Parse options if provided
-    int intervalMs = 1000; // 1 second default for notification detection
-    NotificationConfig config;
-    
-    if (info.Length() >= 2 && info[1].IsObject()) {
-        Napi::Object options = info[1].As<Napi::Object>();
-        
-        if (options.Has("intervalMs")) {
-            intervalMs = options.Get("intervalMs").As<Napi::Number>().Int32Value();
-        }
-        
-        if (options.Has("redactBody")) {
-            config.redactBody = options.Get("redactBody").As<Napi::Boolean>().Value();
-        }
-        
-        if (options.Has("redactTitle")) {
-            config.redactTitle = options.Get("redactTitle").As<Napi::Boolean>().Value();
-        }
-        
-        if (options.Has("rateLimit")) {
-            config.rateLimit = options.Get("rateLimit").As<Napi::Number>().Int32Value();
-        }
-        
-        if (options.Has("minEventInterval")) {
-            config.minEventInterval = options.Get("minEventInterval").As<Napi::Number>().Int32Value();
-        }
-    }
-    
-    notification_watcher_instance->SetConfig(config);
-    notification_watcher_instance->Start(info[0].As<Napi::Function>(), intervalMs);
-    return Napi::Boolean::New(env, true);
-}
-
-Napi::Value StopNotificationWatcher(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-    
-    if (notification_watcher_instance) {
-        notification_watcher_instance->Stop();
-        delete notification_watcher_instance;
-        notification_watcher_instance = nullptr;
-    }
-    
-    return env.Null();
-}
-
-Napi::Value GetCurrentNotifications(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-    
-    if (!notification_watcher_instance) {
-        notification_watcher_instance = new NotificationWatcher();
-    }
-    
-    try {
-        auto notifications = notification_watcher_instance->GetCurrentNotifications();
-        Napi::Array result = Napi::Array::New(env, notifications.size());
-        
-        for (size_t i = 0; i < notifications.size(); i++) {
-            Napi::Object notificationObj = Napi::Object::New(env);
-            notificationObj.Set("eventType", Napi::String::New(env, notifications[i].eventType));
-            notificationObj.Set("sourceApp", Napi::String::New(env, notifications[i].sourceApp));
-            notificationObj.Set("pid", Napi::Number::New(env, notifications[i].pid));
-            notificationObj.Set("title", Napi::String::New(env, notifications[i].title));
-            notificationObj.Set("body", Napi::String::New(env, notifications[i].body));
-            notificationObj.Set("notificationId", Napi::String::New(env, notifications[i].notificationId));
-            notificationObj.Set("timestamp", Napi::Number::New(env, notifications[i].timestamp));
-            notificationObj.Set("confidence", Napi::Number::New(env, notifications[i].confidence));
-            
-            result[i] = notificationObj;
-        }
-        
-        return result;
-    } catch (const std::exception& e) {
-        Napi::Error::New(env, std::string("Error getting notifications: ") + e.what()).ThrowAsJavaScriptException();
-        return env.Null();
-    }
-}
 
 // Focus Idle Watcher functions
 Napi::Value StartFocusIdleWatcher(const Napi::CallbackInfo& info) {
@@ -851,9 +758,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set(Napi::String::New(env, "detectVirtualMachine"), Napi::Function::New(env, DetectVirtualMachine));
     
     // Notification Watcher functions
-    exports.Set(Napi::String::New(env, "startNotificationWatcher"), Napi::Function::New(env, StartNotificationWatcher));
-    exports.Set(Napi::String::New(env, "stopNotificationWatcher"), Napi::Function::New(env, StopNotificationWatcher));
-    exports.Set(Napi::String::New(env, "getCurrentNotifications"), Napi::Function::New(env, GetCurrentNotifications));
     
     // Focus Idle Watcher functions
     exports.Set(Napi::String::New(env, "startFocusIdleWatcher"), Napi::Function::New(env, StartFocusIdleWatcher));
@@ -930,7 +834,81 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
             return env.Null();
         }
     }));
-    
+
+    // NotificationBlocker functions
+    exports.Set(Napi::String::New(env, "enableNotificationBlocking"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            if (!notification_blocker_instance) {
+                notification_blocker_instance = new NotificationBlocker();
+            }
+
+            notification_blocker_instance->SetExamMode(true);
+            bool success = notification_blocker_instance->EnableNotificationBlocking();
+            return Napi::Boolean::New(env, success);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error enabling notification blocking: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "disableNotificationBlocking"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            if (!notification_blocker_instance) {
+                return Napi::Boolean::New(env, true); // Nothing to disable
+            }
+
+            bool success = notification_blocker_instance->DisableNotificationBlocking();
+            notification_blocker_instance->SetExamMode(false);
+            return Napi::Boolean::New(env, success);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error disabling notification blocking: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "getNotificationBlockerStatus"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            if (!notification_blocker_instance) {
+                notification_blocker_instance = new NotificationBlocker();
+            }
+
+            NotificationEvent status = notification_blocker_instance->GetCurrentState();
+
+            Napi::Object result = Napi::Object::New(env);
+            result.Set("module", Napi::String::New(env, "notification-blocker"));
+            result.Set("eventType", Napi::String::New(env, status.eventType));
+            result.Set("reason", Napi::String::New(env, status.reason));
+            result.Set("isBlocked", Napi::Boolean::New(env, status.isBlocked));
+            result.Set("userModified", Napi::Boolean::New(env, status.userModified));
+            result.Set("timestamp", Napi::Number::New(env, status.timestamp));
+            result.Set("source", Napi::String::New(env, "native"));
+            result.Set("examActive", Napi::Boolean::New(env, notification_blocker_instance->IsExamActive()));
+
+            return result;
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error getting notification blocker status: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "detectNotificationViolation"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            if (!notification_blocker_instance) {
+                return Napi::Boolean::New(env, false);
+            }
+
+            bool violation = notification_blocker_instance->DetectUserModification();
+            return Napi::Boolean::New(env, violation);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error detecting notification violation: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
     // Legacy compatibility
     exports.Set(Napi::String::New(env, "start"), Napi::Function::New(env, Start));
     exports.Set(Napi::String::New(env, "stop"), Napi::Function::New(env, Stop));

@@ -287,29 +287,36 @@ module.exports = {
         }
     },
     
-    // Notification watcher specific functions
-    startNotificationWatcher: (callback, options) => {
-        if (nativeAddon && nativeAddon.startNotificationWatcher) {
-            return nativeAddon.startNotificationWatcher(callback, options);
+    // Notification blocker specific functions
+    enableNotificationBlocking: () => {
+        if (nativeAddon && nativeAddon.enableNotificationBlocking) {
+            return nativeAddon.enableNotificationBlocking();
         } else {
-            console.warn('[ProctorNative] Notification watcher not available, no fallback implemented');
+            console.warn('[ProctorNative] Notification blocking not available, no fallback implemented');
             return false;
         }
     },
-    
-    stopNotificationWatcher: () => {
-        if (nativeAddon && nativeAddon.stopNotificationWatcher) {
-            return nativeAddon.stopNotificationWatcher();
+
+    disableNotificationBlocking: () => {
+        if (nativeAddon && nativeAddon.disableNotificationBlocking) {
+            return nativeAddon.disableNotificationBlocking();
         } else {
-            return null;
+            console.warn('[ProctorNative] Notification blocking not available, no fallback implemented');
+            return false;
         }
     },
-    
-    getCurrentNotifications: () => {
-        if (nativeAddon && nativeAddon.getCurrentNotifications) {
-            return nativeAddon.getCurrentNotifications();
+
+    getNotificationBlockerStatus: () => {
+        if (nativeAddon && nativeAddon.getNotificationBlockerStatus) {
+            return nativeAddon.getNotificationBlockerStatus();
         } else {
-            return [];
+            return {
+                eventType: 'heartbeat',
+                isBlocked: false,
+                userModified: false,
+                timestamp: Date.now(),
+                source: 'fallback'
+            };
         }
     },
     

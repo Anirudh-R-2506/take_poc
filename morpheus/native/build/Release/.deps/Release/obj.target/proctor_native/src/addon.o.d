@@ -9,7 +9,7 @@ Release/obj.target/proctor_native/src/addon.o: ../src/addon.cc \
   /Users/anirudhr/Desktop/test/take-poc/morpheus/native/node_modules/node-addon-api/napi-inl.deprecated.h \
   ../src/ProcessWatcher.h ../src/CommonTypes.h ../src/DeviceWatcher.h \
   ../src/ScreenWatcher.h ../src/VMDetector.h \
-  ../src/NotificationWatcher.h ../src/FocusIdleWatcher.h \
+  ../src/NotificationBlocker.h ../src/FocusIdleWatcher.h \
   ../src/ClipboardWatcher.h ../src/BluetoothWatcher.h \
   ../src/PermissionChecker.h
 ../src/addon.cc:
@@ -25,7 +25,7 @@ Release/obj.target/proctor_native/src/addon.o: ../src/addon.cc \
 ../src/DeviceWatcher.h:
 ../src/ScreenWatcher.h:
 ../src/VMDetector.h:
-../src/NotificationWatcher.h:
+../src/NotificationBlocker.h:
 ../src/FocusIdleWatcher.h:
 ../src/ClipboardWatcher.h:
 ../src/BluetoothWatcher.h:
