@@ -110,17 +110,29 @@ class PermissionService extends EventEmitter {
         }
 
         let granted = false;
-        
+
         try {
             switch (permissionType) {
                 case 'accessibility':
                     granted = await this.permissionManager.requestAccessibilityPermission();
                     break;
-                case 'screen-recording':
+                case 'screenRecording':
                     granted = await this.permissionManager.requestScreenRecordingPermission();
                     break;
-                case 'input-monitoring':
+                case 'inputMonitoring':
                     granted = await this.permissionManager.requestInputMonitoringPermission();
+                    break;
+                case 'registryAccess':
+                    granted = await this.permissionManager.requestRegistryPermission();
+                    break;
+                case 'deviceEnumeration':
+                    granted = await this.permissionManager.requestDeviceEnumerationPermission();
+                    break;
+                case 'processAccess':
+                    granted = await this.permissionManager.requestProcessAccessPermission();
+                    break;
+                case 'clipboardAccess':
+                    granted = await this.permissionManager.requestClipboardPermission();
                     break;
                 default:
                     throw new Error(`Unknown permission type: ${permissionType}`);
@@ -129,7 +141,7 @@ class PermissionService extends EventEmitter {
             // Refresh permission status after request
             console.log(`[PermissionService] Permission ${permissionType} request result: ${granted}, refreshing status...`);
             await this.refreshPermissions();
-            
+
             return granted;
         } catch (error) {
             console.error(`[PermissionService] Error requesting permission ${permissionType}:`, error);

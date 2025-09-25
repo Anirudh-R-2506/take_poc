@@ -49,6 +49,44 @@ class PermissionManager {
         checkCommand: null, // Uses native API
         error: null,
       },
+      ...(platform === "win32" && {
+        registryAccess: {
+          name: "Registry Access",
+          status: "unknown",
+          required: true,
+          description: "Required for system settings and notification control (Windows)",
+          services: ["NotificationBlocker", "VMDetector"],
+          checkCommand: null,
+          error: null,
+        },
+        deviceEnumeration: {
+          name: "Device Enumeration",
+          status: "unknown",
+          required: true,
+          description: "Required for hardware device detection (Windows)",
+          services: ["DeviceWatcher", "ScreenWatcher", "BluetoothWatcher"],
+          checkCommand: null,
+          error: null,
+        },
+        processAccess: {
+          name: "Process Access",
+          status: "unknown",
+          required: true,
+          description: "Required for application monitoring (Windows)",
+          services: ["ProcessWatcher"],
+          checkCommand: null,
+          error: null,
+        },
+        clipboardAccess: {
+          name: "Clipboard Access",
+          status: "unknown",
+          required: true,
+          description: "Required for clipboard content monitoring (Windows)",
+          services: ["ClipboardWatcher"],
+          checkCommand: null,
+          error: null,
+        }
+      }),
     };
 
     this.nativeAddon = null;
@@ -152,6 +190,14 @@ class PermissionManager {
     await this.checkAccessibilityPermission();
     await this.checkScreenRecordingPermission();
     await this.checkInputMonitoringPermission();
+
+    // Windows-specific permission checks
+    if (platform === "win32") {
+      await this.checkRegistryAccessPermission();
+      await this.checkDeviceEnumerationPermission();
+      await this.checkProcessAccessPermission();
+      await this.checkClipboardAccessPermission();
+    }
 
     const status = this.getPermissionStatus();
     console.log("[PermissionManager] All permissions checked:", status);
@@ -339,6 +385,130 @@ class PermissionManager {
   }
 
   /**
+   * Check registry access permission (Windows only)
+   */
+  async checkRegistryAccessPermission() {
+    console.log("[PermissionManager] Checking registry access permission...");
+    this.permissions.registryAccess.status = "checking";
+    this.emitPermissionChange("registryAccess", "checking");
+
+    try {
+      if (this.nativeAddon && this.nativeAddon.checkRegistryPermission) {
+        console.log('[PermissionManager] Using native addon for registry access check');
+        const hasPermission = this.nativeAddon.checkRegistryPermission();
+        console.log(`[PermissionManager] Native registry access check result: ${hasPermission}`);
+
+        this.permissions.registryAccess.status = hasPermission ? "granted" : "denied";
+        this.permissions.registryAccess.error = hasPermission ? null : "Cannot access Windows registry";
+      } else {
+        this.permissions.registryAccess.status = "denied";
+        this.permissions.registryAccess.error = "Native addon not available";
+      }
+    } catch (error) {
+      this.permissions.registryAccess.status = "denied";
+      this.permissions.registryAccess.error = error.message;
+      console.error("[PermissionManager] Registry access permission error:", error.message);
+    }
+
+    console.log(`[PermissionManager] Registry access permission: ${this.permissions.registryAccess.status.toUpperCase()}`);
+    this.emitPermissionChange("registryAccess", this.permissions.registryAccess.status);
+    return this.permissions.registryAccess.status;
+  }
+
+  /**
+   * Check device enumeration permission (Windows only)
+   */
+  async checkDeviceEnumerationPermission() {
+    console.log("[PermissionManager] Checking device enumeration permission...");
+    this.permissions.deviceEnumeration.status = "checking";
+    this.emitPermissionChange("deviceEnumeration", "checking");
+
+    try {
+      if (this.nativeAddon && this.nativeAddon.checkDeviceEnumerationPermission) {
+        console.log('[PermissionManager] Using native addon for device enumeration check');
+        const hasPermission = this.nativeAddon.checkDeviceEnumerationPermission();
+        console.log(`[PermissionManager] Native device enumeration check result: ${hasPermission}`);
+
+        this.permissions.deviceEnumeration.status = hasPermission ? "granted" : "denied";
+        this.permissions.deviceEnumeration.error = hasPermission ? null : "Cannot enumerate hardware devices";
+      } else {
+        this.permissions.deviceEnumeration.status = "denied";
+        this.permissions.deviceEnumeration.error = "Native addon not available";
+      }
+    } catch (error) {
+      this.permissions.deviceEnumeration.status = "denied";
+      this.permissions.deviceEnumeration.error = error.message;
+      console.error("[PermissionManager] Device enumeration permission error:", error.message);
+    }
+
+    console.log(`[PermissionManager] Device enumeration permission: ${this.permissions.deviceEnumeration.status.toUpperCase()}`);
+    this.emitPermissionChange("deviceEnumeration", this.permissions.deviceEnumeration.status);
+    return this.permissions.deviceEnumeration.status;
+  }
+
+  /**
+   * Check process access permission (Windows only)
+   */
+  async checkProcessAccessPermission() {
+    console.log("[PermissionManager] Checking process access permission...");
+    this.permissions.processAccess.status = "checking";
+    this.emitPermissionChange("processAccess", "checking");
+
+    try {
+      if (this.nativeAddon && this.nativeAddon.checkProcessAccessPermission) {
+        console.log('[PermissionManager] Using native addon for process access check');
+        const hasPermission = this.nativeAddon.checkProcessAccessPermission();
+        console.log(`[PermissionManager] Native process access check result: ${hasPermission}`);
+
+        this.permissions.processAccess.status = hasPermission ? "granted" : "denied";
+        this.permissions.processAccess.error = hasPermission ? null : "Cannot access process information";
+      } else {
+        this.permissions.processAccess.status = "denied";
+        this.permissions.processAccess.error = "Native addon not available";
+      }
+    } catch (error) {
+      this.permissions.processAccess.status = "denied";
+      this.permissions.processAccess.error = error.message;
+      console.error("[PermissionManager] Process access permission error:", error.message);
+    }
+
+    console.log(`[PermissionManager] Process access permission: ${this.permissions.processAccess.status.toUpperCase()}`);
+    this.emitPermissionChange("processAccess", this.permissions.processAccess.status);
+    return this.permissions.processAccess.status;
+  }
+
+  /**
+   * Check clipboard access permission (Windows only)
+   */
+  async checkClipboardAccessPermission() {
+    console.log("[PermissionManager] Checking clipboard access permission...");
+    this.permissions.clipboardAccess.status = "checking";
+    this.emitPermissionChange("clipboardAccess", "checking");
+
+    try {
+      if (this.nativeAddon && this.nativeAddon.checkClipboardPermission) {
+        console.log('[PermissionManager] Using native addon for clipboard access check');
+        const hasPermission = this.nativeAddon.checkClipboardPermission();
+        console.log(`[PermissionManager] Native clipboard access check result: ${hasPermission}`);
+
+        this.permissions.clipboardAccess.status = hasPermission ? "granted" : "denied";
+        this.permissions.clipboardAccess.error = hasPermission ? null : "Cannot access clipboard";
+      } else {
+        this.permissions.clipboardAccess.status = "denied";
+        this.permissions.clipboardAccess.error = "Native addon not available";
+      }
+    } catch (error) {
+      this.permissions.clipboardAccess.status = "denied";
+      this.permissions.clipboardAccess.error = error.message;
+      console.error("[PermissionManager] Clipboard access permission error:", error.message);
+    }
+
+    console.log(`[PermissionManager] Clipboard access permission: ${this.permissions.clipboardAccess.status.toUpperCase()}`);
+    this.emitPermissionChange("clipboardAccess", this.permissions.clipboardAccess.status);
+    return this.permissions.clipboardAccess.status;
+  }
+
+  /**
    * Request specific permission
    */
   async requestPermission(permissionType) {
@@ -489,6 +659,130 @@ class PermissionManager {
         "[PermissionManager] Please enable input monitoring permission in System Preferences > Security & Privacy > Privacy > Input Monitoring"
       );
     }
+    return false;
+  }
+
+  /**
+   * Request registry access permission (Windows-specific)
+   */
+  async requestRegistryPermission() {
+    if (os.platform() !== 'win32') {
+      console.log('[PermissionManager] Registry permission not needed on this platform');
+      return true;
+    }
+
+    console.log('[PermissionManager] Requesting registry access permission...');
+
+    if (this.nativeAddon && this.nativeAddon.requestRegistryPermission) {
+      try {
+        const granted = this.nativeAddon.requestRegistryPermission();
+        if (granted) {
+          this.permissions.registryAccess.status = 'granted';
+          this.permissions.registryAccess.error = null;
+          this.emitPermissionChange('registryAccess', 'granted');
+          return true;
+        }
+      } catch (error) {
+        console.error('[PermissionManager] Error requesting registry permission:', error);
+        this.permissions.registryAccess.error = error.message;
+      }
+    }
+
+    await this.openSystemPreferences('Security', 'Privacy_Registry');
+    console.log('[PermissionManager] Please run as administrator or grant registry access');
+    return false;
+  }
+
+  /**
+   * Request device enumeration permission (Windows-specific)
+   */
+  async requestDeviceEnumerationPermission() {
+    if (os.platform() !== 'win32') {
+      console.log('[PermissionManager] Device enumeration permission not needed on this platform');
+      return true;
+    }
+
+    console.log('[PermissionManager] Requesting device enumeration permission...');
+
+    if (this.nativeAddon && this.nativeAddon.requestDeviceEnumerationPermission) {
+      try {
+        const granted = this.nativeAddon.requestDeviceEnumerationPermission();
+        if (granted) {
+          this.permissions.deviceEnumeration.status = 'granted';
+          this.permissions.deviceEnumeration.error = null;
+          this.emitPermissionChange('deviceEnumeration', 'granted');
+          return true;
+        }
+      } catch (error) {
+        console.error('[PermissionManager] Error requesting device enumeration permission:', error);
+        this.permissions.deviceEnumeration.error = error.message;
+      }
+    }
+
+    await this.openSystemPreferences('Security', 'Privacy_Devices');
+    console.log('[PermissionManager] Please grant device access permissions in Windows Settings');
+    return false;
+  }
+
+  /**
+   * Request process access permission (Windows-specific)
+   */
+  async requestProcessAccessPermission() {
+    if (os.platform() !== 'win32') {
+      console.log('[PermissionManager] Process access permission not needed on this platform');
+      return true;
+    }
+
+    console.log('[PermissionManager] Requesting process access permission...');
+
+    if (this.nativeAddon && this.nativeAddon.requestProcessAccessPermission) {
+      try {
+        const granted = this.nativeAddon.requestProcessAccessPermission();
+        if (granted) {
+          this.permissions.processAccess.status = 'granted';
+          this.permissions.processAccess.error = null;
+          this.emitPermissionChange('processAccess', 'granted');
+          return true;
+        }
+      } catch (error) {
+        console.error('[PermissionManager] Error requesting process access permission:', error);
+        this.permissions.processAccess.error = error.message;
+      }
+    }
+
+    await this.openSystemPreferences('Security', 'Privacy_Process');
+    console.log('[PermissionManager] Please run as administrator or grant process access');
+    return false;
+  }
+
+  /**
+   * Request clipboard access permission (Windows-specific)
+   */
+  async requestClipboardPermission() {
+    if (os.platform() !== 'win32') {
+      console.log('[PermissionManager] Clipboard access permission not needed on this platform');
+      return true;
+    }
+
+    console.log('[PermissionManager] Requesting clipboard access permission...');
+
+    if (this.nativeAddon && this.nativeAddon.requestClipboardPermission) {
+      try {
+        const granted = this.nativeAddon.requestClipboardPermission();
+        if (granted) {
+          this.permissions.clipboardAccess.status = 'granted';
+          this.permissions.clipboardAccess.error = null;
+          this.emitPermissionChange('clipboardAccess', 'granted');
+          return true;
+        }
+      } catch (error) {
+        console.error('[PermissionManager] Error requesting clipboard access permission:', error);
+        this.permissions.clipboardAccess.error = error.message;
+      }
+    }
+
+    await this.openSystemPreferences('Security', 'Privacy_Clipboard');
+    console.log('[PermissionManager] Please grant clipboard access in Windows Settings');
     return false;
   }
 

@@ -13,6 +13,9 @@
 #include <comdef.h>
 #include <wbemidl.h>
 #include <wbemcli.h>
+#include <setupapi.h>
+#include <tlhelp32.h>
+#pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "wbemuuid.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
@@ -293,6 +296,74 @@ bool PermissionChecker::RequestScreenRecordingPermission() {
 }
 
 /**
+ * Check if registry access is available
+ */
+static bool CheckRegistryAccess() {
+#ifdef _WIN32
+    // Test registry read access
+    HKEY hKey;
+    LONG result = RegOpenKeyExA(HKEY_CURRENT_USER, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion", 0, KEY_READ, &hKey);
+    if (result == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return true;
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if device enumeration is available
+ */
+static bool CheckDeviceEnumerationAccess() {
+#ifdef _WIN32
+    // Test device enumeration access by checking for SetupDi functions
+    HDEVINFO hDevInfo = SetupDiGetClassDevs(NULL, NULL, NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT);
+    if (hDevInfo != INVALID_HANDLE_VALUE) {
+        SetupDiDestroyDeviceInfoList(hDevInfo);
+        return true;
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if process enumeration is available
+ */
+static bool CheckProcessAccess() {
+#ifdef _WIN32
+    // Test process enumeration access
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot != INVALID_HANDLE_VALUE) {
+        CloseHandle(hSnapshot);
+        return true;
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if clipboard access is available
+ */
+static bool CheckClipboardAccess() {
+#ifdef _WIN32
+    // Test clipboard access
+    if (OpenClipboard(NULL)) {
+        CloseClipboard();
+        return true;
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
  * Request input monitoring permission (will prompt user)
  */
 bool PermissionChecker::RequestInputMonitoringPermission() {
@@ -326,6 +397,145 @@ void PermissionChecker::OpenSystemPreferences(const std::string& pane) {
     } else {
         OpenWindowsSettings("ms-settings:privacy");
     }
+#endif
+}
+
+/**
+ * Check if registry permission is granted
+ */
+bool PermissionChecker::CheckRegistryPermission() {
+#ifdef _WIN32
+    return CheckRegistryAccess();
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if device enumeration permission is granted
+ */
+bool PermissionChecker::CheckDeviceEnumerationPermission() {
+#ifdef _WIN32
+    return CheckDeviceEnumerationAccess();
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if process access permission is granted
+ */
+bool PermissionChecker::CheckProcessAccessPermission() {
+#ifdef _WIN32
+    return CheckProcessAccess();
+#else
+    return true;
+#endif
+}
+
+/**
+ * Check if clipboard permission is granted
+ */
+bool PermissionChecker::CheckClipboardPermission() {
+#ifdef _WIN32
+    return CheckClipboardAccess();
+#else
+    return true;
+#endif
+}
+
+/**
+ * Request registry permission (will prompt user)
+ */
+bool PermissionChecker::RequestRegistryPermission() {
+#ifdef _WIN32
+    std::wstring msg = L"Registry access is required for notification and system monitoring. "
+                      L"This may require running the application as Administrator. "
+                      L"Would you like to restart as Administrator?";
+
+    int result = MessageBoxW(NULL, msg.c_str(), L"Morpheus - Registry Permission",
+                            MB_YESNO | MB_ICONQUESTION);
+
+    if (result == IDYES) {
+        // Request UAC elevation
+        std::wstring appPath;
+        wchar_t path[MAX_PATH];
+        if (GetModuleFileNameW(NULL, path, MAX_PATH)) {
+            ShellExecuteW(NULL, L"runas", path, NULL, NULL, SW_SHOWNORMAL);
+        }
+    }
+    return false; // User needs to restart as admin
+#else
+    return true;
+#endif
+}
+
+/**
+ * Request device enumeration permission (will prompt user)
+ */
+bool PermissionChecker::RequestDeviceEnumerationPermission() {
+#ifdef _WIN32
+    std::wstring msg = L"Device enumeration requires access to system hardware information. "
+                      L"Would you like to run as Administrator for full device monitoring?";
+
+    int result = MessageBoxW(NULL, msg.c_str(), L"Morpheus - Device Access Permission",
+                            MB_YESNO | MB_ICONQUESTION);
+
+    if (result == IDYES) {
+        std::wstring appPath;
+        wchar_t path[MAX_PATH];
+        if (GetModuleFileNameW(NULL, path, MAX_PATH)) {
+            ShellExecuteW(NULL, L"runas", path, NULL, NULL, SW_SHOWNORMAL);
+        }
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
+ * Request process access permission (will prompt user)
+ */
+bool PermissionChecker::RequestProcessAccessPermission() {
+#ifdef _WIN32
+    std::wstring msg = L"Process monitoring requires access to running applications. "
+                      L"Would you like to run as Administrator for full process monitoring?";
+
+    int result = MessageBoxW(NULL, msg.c_str(), L"Morpheus - Process Access Permission",
+                            MB_YESNO | MB_ICONQUESTION);
+
+    if (result == IDYES) {
+        std::wstring appPath;
+        wchar_t path[MAX_PATH];
+        if (GetModuleFileNameW(NULL, path, MAX_PATH)) {
+            ShellExecuteW(NULL, L"runas", path, NULL, NULL, SW_SHOWNORMAL);
+        }
+    }
+    return false;
+#else
+    return true;
+#endif
+}
+
+/**
+ * Request clipboard permission (will prompt user)
+ */
+bool PermissionChecker::RequestClipboardPermission() {
+#ifdef _WIN32
+    std::wstring msg = L"Clipboard monitoring is currently restricted. "
+                      L"Please ensure no other applications are blocking clipboard access. "
+                      L"Would you like to check Windows clipboard settings?";
+
+    int result = MessageBoxW(NULL, msg.c_str(), L"Morpheus - Clipboard Permission",
+                            MB_YESNO | MB_ICONQUESTION);
+
+    if (result == IDYES) {
+        OpenWindowsSettings("ms-settings:clipboard");
+    }
+    return false;
+#else
+    return true;
 #endif
 }
 
@@ -404,6 +614,95 @@ Napi::Value RequestInputMonitoringPermission(const Napi::CallbackInfo& info) {
     } catch (const std::exception& e) {
         Napi::Error::New(env, std::string("Error requesting input monitoring permission: ") + e.what())
             .ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+// N-API wrappers for new Windows permissions
+Napi::Value CheckRegistryPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool hasPermission = PermissionChecker::CheckRegistryPermission();
+        return Napi::Boolean::New(env, hasPermission);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error checking registry permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value CheckDeviceEnumerationPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool hasPermission = PermissionChecker::CheckDeviceEnumerationPermission();
+        return Napi::Boolean::New(env, hasPermission);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error checking device enumeration permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value CheckProcessAccessPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool hasPermission = PermissionChecker::CheckProcessAccessPermission();
+        return Napi::Boolean::New(env, hasPermission);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error checking process access permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value CheckClipboardPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool hasPermission = PermissionChecker::CheckClipboardPermission();
+        return Napi::Boolean::New(env, hasPermission);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error checking clipboard permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value RequestRegistryPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool granted = PermissionChecker::RequestRegistryPermission();
+        return Napi::Boolean::New(env, granted);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error requesting registry permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value RequestDeviceEnumerationPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool granted = PermissionChecker::RequestDeviceEnumerationPermission();
+        return Napi::Boolean::New(env, granted);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error requesting device enumeration permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value RequestProcessAccessPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool granted = PermissionChecker::RequestProcessAccessPermission();
+        return Napi::Boolean::New(env, granted);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error requesting process access permission: ") + e.what()).ThrowAsJavaScriptException();
+        return env.Null();
+    }
+}
+
+Napi::Value RequestClipboardPermission(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    try {
+        bool granted = PermissionChecker::RequestClipboardPermission();
+        return Napi::Boolean::New(env, granted);
+    } catch (const std::exception& e) {
+        Napi::Error::New(env, std::string("Error requesting clipboard permission: ") + e.what()).ThrowAsJavaScriptException();
         return env.Null();
     }
 }

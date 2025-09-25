@@ -520,18 +520,28 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
         NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
 
         if (frontApp && currentApp) {
+            NSString* frontBundleId = [frontApp bundleIdentifier];
+            NSString* currentBundleId = [currentApp bundleIdentifier];
+            pid_t frontPid = [frontApp processIdentifier];
+            pid_t currentPid = [currentApp processIdentifier];
+
+            printf("[FocusIdleWatcher] Focus check: Front=%s (PID:%d), Current=%s (PID:%d)\n",
+                   [frontBundleId UTF8String] ?: "unknown",
+                   frontPid,
+                   [currentBundleId UTF8String] ?: "unknown",
+                   currentPid);
+
             // Primary check: PID comparison is most reliable
-            if ([frontApp processIdentifier] == [currentApp processIdentifier]) {
+            if (frontPid == currentPid) {
+                printf("[FocusIdleWatcher] ✓ PID match - app is focused\n");
                 return true;
             }
 
             // Backup check: bundle identifier comparison
-            NSString* frontBundleId = [frontApp bundleIdentifier];
-            NSString* currentBundleId = [currentApp bundleIdentifier];
-
             if (frontBundleId && currentBundleId) {
                 // Direct match
                 if ([frontBundleId isEqualToString:currentBundleId]) {
+                    printf("[FocusIdleWatcher] ✓ Bundle ID match - app is focused\n");
                     return true;
                 }
 
@@ -544,7 +554,12 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
                     bool frontIsElectron = [frontBundleId containsString:@"electron"] || [frontBundleId isEqualToString:@"com.github.Electron"];
                     bool currentIsElectron = [currentBundleId containsString:@"electron"] || [currentBundleId isEqualToString:@"com.github.Electron"];
 
+                    printf("[FocusIdleWatcher] Electron check: Front=%s, Current=%s\n",
+                           frontIsElectron ? "true" : "false",
+                           currentIsElectron ? "true" : "false");
+
                     if (frontIsElectron && currentIsElectron) {
+                        printf("[FocusIdleWatcher] ✓ Both are Electron apps - app is focused\n");
                         return true;
                     }
                 }
@@ -552,6 +567,7 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
         }
     }
 
+    printf("[FocusIdleWatcher] ✗ App focus check failed - not focused\n");
     // If we can't determine, assume not focused to be safe
     return false;
 }

@@ -47,9 +47,9 @@ const ProctorDashboard = () => {
           permissions: status?.permissions
         });
 
-        // If all permissions are granted, start workers and switch to dashboard
+        // If all permissions are granted after manual retry, start workers and proceed
         if (status && status.allGranted) {
-          console.log("[ProctorDashboard] All permissions granted, starting workers...");
+          console.log("[ProctorDashboard] All permissions granted after manual check! Starting workers and proceeding to dashboard...");
 
           try {
             if (window.proctorAPI.startWorkers) {
@@ -57,15 +57,8 @@ const ProctorDashboard = () => {
               const result = await window.proctorAPI.startWorkers();
               console.log("[ProctorDashboard] startWorkers result:", result);
 
-              if (result !== false) {
-                console.log("[ProctorDashboard] Workers started successfully, switching to dashboard");
-                setAppState('dashboard');
-              } else {
-                console.warn("[ProctorDashboard] Workers start returned false");
-                // Still switch to dashboard even if workers fail to start
-                console.log("[ProctorDashboard] Switching to dashboard anyway");
-                setAppState('dashboard');
-              }
+              console.log("[ProctorDashboard] Workers started, switching to dashboard");
+              setAppState('dashboard');
             } else {
               console.warn("[ProctorDashboard] startWorkers not available, switching to dashboard anyway");
               setAppState('dashboard');
@@ -77,8 +70,7 @@ const ProctorDashboard = () => {
             setAppState('dashboard');
           }
         } else {
-          console.log("[ProctorDashboard] Not all permissions granted, staying on permission view");
-          console.log("[ProctorDashboard] Missing permissions:", status?.permissions ?
+          console.log("[ProctorDashboard] Missing permissions - staying on permission view:", status?.permissions ?
             Object.entries(status.permissions).filter(([_, perm]) => perm.required && perm.status !== 'granted') :
             'Unknown');
           setAppState('permissions');
@@ -481,7 +473,7 @@ const ProctorDashboard = () => {
                         </div>
 
                         {/* Module-specific data */}
-                        {renderModuleSpecificData(moduleName, data)}
+                        {renderModuleSpecificData(moduleName, data, handleResetNotificationBlocker)}
                       </div>
                     </div>
                   ) : (
@@ -526,7 +518,7 @@ const ProctorDashboard = () => {
 };
 
 // Helper function to render module-specific data points
-const renderModuleSpecificData = (moduleName, data) => {
+const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlocker) => {
   if (!data) return null;
 
   switch (moduleName) {
