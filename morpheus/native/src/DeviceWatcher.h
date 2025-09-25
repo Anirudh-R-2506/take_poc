@@ -9,15 +9,25 @@
 #include <vector>
 #include <map>
 #include <set>
-#include "CommonTypes.h"
-
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef _WINSOCKAPI_
+#define _WINSOCKAPI_
+#endif
 #include <windows.h>
 #include <dbt.h>
 #include <winioctl.h>
 #include <setupapi.h>
 #include <devguid.h>
 #pragma comment(lib, "setupapi.lib")
+#endif
+
+#include "CommonTypes.h"
 #elif __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #include <DiskArbitration/DiskArbitration.h>

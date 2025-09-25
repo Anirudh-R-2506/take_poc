@@ -9,8 +9,15 @@
 #include <functional>
 
 #ifdef _WIN32
-#include <windows.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+// Include winsock2.h before windows.h to avoid conflicts
 #include <winsock2.h>
+#include <windows.h>
 #include <iphlpapi.h>
 #include <tlhelp32.h>
 #include <intrin.h>

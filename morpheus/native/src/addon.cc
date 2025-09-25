@@ -1,3 +1,16 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+// Prevent winsock.h from being included by Windows headers
+#ifndef _WINSOCKAPI_
+#define _WINSOCKAPI_
+#endif
+#endif
+
 #include <napi.h>
 #include "ProcessWatcher.h"
 #include "DeviceWatcher.h"
@@ -831,6 +844,95 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
             return Napi::Boolean::New(env, granted);
         } catch (const std::exception& e) {
             Napi::Error::New(env, std::string("Error requesting input monitoring permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    // Windows-specific permission functions
+    exports.Set(Napi::String::New(env, "checkRegistryPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool hasPermission = PermissionChecker::CheckRegistryPermission();
+            return Napi::Boolean::New(env, hasPermission);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error checking registry permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "checkDeviceEnumerationPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool hasPermission = PermissionChecker::CheckDeviceEnumerationPermission();
+            return Napi::Boolean::New(env, hasPermission);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error checking device enumeration permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "checkProcessAccessPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool hasPermission = PermissionChecker::CheckProcessAccessPermission();
+            return Napi::Boolean::New(env, hasPermission);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error checking process access permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "checkClipboardPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool hasPermission = PermissionChecker::CheckClipboardPermission();
+            return Napi::Boolean::New(env, hasPermission);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error checking clipboard permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "requestRegistryPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool granted = PermissionChecker::RequestRegistryPermission();
+            return Napi::Boolean::New(env, granted);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error requesting registry permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "requestDeviceEnumerationPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool granted = PermissionChecker::RequestDeviceEnumerationPermission();
+            return Napi::Boolean::New(env, granted);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error requesting device enumeration permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "requestProcessAccessPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool granted = PermissionChecker::RequestProcessAccessPermission();
+            return Napi::Boolean::New(env, granted);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error requesting process access permission: ") + e.what()).ThrowAsJavaScriptException();
+            return env.Null();
+        }
+    }));
+
+    exports.Set(Napi::String::New(env, "requestClipboardPermission"), Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+        Napi::Env env = info.Env();
+        try {
+            bool granted = PermissionChecker::RequestClipboardPermission();
+            return Napi::Boolean::New(env, granted);
+        } catch (const std::exception& e) {
+            Napi::Error::New(env, std::string("Error requesting clipboard permission: ") + e.what()).ThrowAsJavaScriptException();
             return env.Null();
         }
     }));
