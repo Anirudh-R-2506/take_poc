@@ -162,7 +162,7 @@ static bool CheckWindowsAccessibility() {
     }
     
     // Check if narrator or other accessibility tools are running
-    HWND narratorWnd = FindWindow(L"Narrator", NULL);
+    HWND narratorWnd = FindWindowW(L"Narrator", NULL);
     if (narratorWnd != NULL) {
         return true;
     }
