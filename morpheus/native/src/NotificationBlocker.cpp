@@ -432,7 +432,7 @@ std::string NotificationBlocker::StateToString(NotificationBlockState state)
         return "disabled";
     case NotificationBlockState::ENABLED:
         return "enabled";
-    case NotificationBlockState::ERROR:
+    case NotificationBlockState::ERROR_STATE:
         return "error";
     default:
         return "unknown";

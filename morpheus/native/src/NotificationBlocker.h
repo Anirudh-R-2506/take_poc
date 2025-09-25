@@ -27,7 +27,7 @@
 enum class NotificationBlockState {
     DISABLED = 0,       // Notifications enabled (normal state)
     ENABLED = 1,        // Notifications blocked (during exam)
-    ERROR = 2           // Error state
+    ERROR_STATE = 2     // Error state
 };
 
 struct NotificationEvent {

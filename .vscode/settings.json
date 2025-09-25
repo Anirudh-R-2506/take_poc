@@ -1,6 +1,14 @@
 {
     "C_Cpp.default.compilerPath": "/opt/homebrew/bin/gcc-14",
     "files.associations": {
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "locale": "cpp",
+        "regex": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "random": "cpp",
+        "format": "cpp",
+        "type_traits": "cpp"
     }
 }
