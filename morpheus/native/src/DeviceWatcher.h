@@ -25,9 +25,6 @@
 #include <setupapi.h>
 #include <devguid.h>
 #pragma comment(lib, "setupapi.lib")
-#endif
-
-#include "CommonTypes.h"
 #elif __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #include <DiskArbitration/DiskArbitration.h>
@@ -35,6 +32,8 @@
 #include <IOKit/usb/IOUSBLib.h>
 #include <IOKit/storage/IOBlockStorageDriver.h>
 #endif
+
+#include "CommonTypes.h"
 
 class DeviceWatcher {
 public:
