@@ -386,16 +386,14 @@ std::vector<ProcessInfo> ScreenWatcher::detectRecordingProcesses() {
             if (recordingBlacklist_.find(processName) != recordingBlacklist_.end() ||
                 recordingBlacklist_.find(pe.szExeFile) != recordingBlacklist_.end()) {
                 
-                ProcessInfo procInfo;
-                procInfo.pid = pe.th32ProcessID;
-                procInfo.name = pe.szExeFile;
+                ProcessInfo procInfo(pe.th32ProcessID, pe.szExeFile);
                 
                 // Get process path
                 HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
                 if (hProcess) {
                     WCHAR processPath[MAX_PATH];
                     DWORD pathSize = MAX_PATH;
-                    if (QueryFullProcessImageName(hProcess, 0, processPath, &pathSize)) {
+                    if (QueryFullProcessImageNameW(hProcess, 0, processPath, &pathSize)) {
                         std::wstring wPath(processPath);
                         procInfo.path = std::string(wPath.begin(), wPath.end());
                     }

@@ -88,6 +88,7 @@ private:
     std::vector<OverlayWindow> lastOverlayWindows_;
     double recordingConfidenceThreshold_;
     double overlayConfidenceThreshold_;
+    int checkCount_;
     
     // Platform-specific implementations
     ScreenStatus detectScreenStatus();
@@ -119,6 +120,7 @@ private:
     std::vector<std::string> getProcessModules(DWORD processID);
     std::vector<OverlayWindow> enumerateWindowsForOverlays();
     std::vector<std::string> enumerateVirtualCameras();
+    bool isExternalInputDevice(const std::string& deviceName, const std::string& deviceType);
 #elif __APPLE__
     std::vector<std::string> getProcessLibraries(int pid);
     std::vector<OverlayWindow> enumerateWindowsForOverlays();
