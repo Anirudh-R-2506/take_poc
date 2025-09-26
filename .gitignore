@@ -93,3 +93,4 @@ out/
 
 *.lock
 
+morpheus/native/build/
