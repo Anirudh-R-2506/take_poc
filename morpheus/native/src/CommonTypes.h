@@ -47,10 +47,14 @@ struct OverlayWindow {
     } bounds;
     int zOrder;
     double alpha;
+    double confidence;
     std::vector<std::string> extendedStyles;
 
+    // Default constructor
+    OverlayWindow() : pid(0), bounds{0, 0, 0, 0}, zOrder(0), alpha(1.0), confidence(1.0) {}
+
     OverlayWindow(const std::string& handle, int p, const std::string& name)
-        : windowHandle(handle), pid(p), processName(name), zOrder(0), alpha(1.0) {}
+        : windowHandle(handle), pid(p), processName(name), bounds{0, 0, 0, 0}, zOrder(0), alpha(1.0), confidence(1.0) {}
 };
 
 struct RecordingDetectionResult {

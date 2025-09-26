@@ -170,8 +170,6 @@ std::vector<InputDeviceInfo> ScreenWatcher::getWindowsInputDevices() {
 }
 
 bool ScreenWatcher::isWindowsMirroring() {
-    DISPLAYCONFIG_PATH_INFO pathArray[16];
-    DISPLAYCONFIG_MODE_INFO modeArray[32];
     UINT32 pathCount = 16;
     UINT32 modeCount = 32;
 
@@ -297,7 +295,7 @@ void ScreenWatcher::watcherLoop() {
             if (eventCallback) {
                 eventCallback(json);
             }
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(checkIntervalMs));
@@ -514,36 +512,92 @@ std::vector<OverlayWindow> ScreenWatcher::getOverlayWindows() {
 
             RECT rect;
             if (GetWindowRect(hwnd, &rect)) {
-                overlay.geometry.x = rect.left;
-                overlay.geometry.y = rect.top;
-                overlay.geometry.w = rect.right - rect.left;
-                overlay.geometry.h = rect.bottom - rect.top;
+                overlay.bounds.x = rect.left;
+                overlay.bounds.y = rect.top;
+                overlay.bounds.w = rect.right - rect.left;
+                overlay.bounds.h = rect.bottom - rect.top;
             }
 
             std::ostringstream oss;
             oss << "0x" << std::hex << reinterpret_cast<uintptr_t>(hwnd);
             overlay.windowHandle = oss.str();
 
+            // Calculate confidence based on multiple suspicious characteristics
             overlay.confidence = 0.0;
-            if (isLayered) overlay.confidence += 0.4;
-            if (isTopmost) overlay.confidence += 0.3;
-            if (isToolWindow) overlay.confidence += 0.2;
 
+            // Base scoring for window properties
+            if (isLayered) overlay.confidence += 0.25;      // Layered windows can be transparent overlays
+            if (isTopmost) overlay.confidence += 0.30;      // Always-on-top is highly suspicious
+            if (isToolWindow) overlay.confidence += 0.15;   // Tool windows are often overlays
+
+            // Enhanced transparency analysis
             if (isLayered) {
                 COLORREF colorKey;
                 BYTE alpha;
                 DWORD flags;
                 if (GetLayeredWindowAttributes(hwnd, &colorKey, &alpha, &flags)) {
-                    if (alpha < 255) {
-                        overlay.confidence += 0.3;
-                        overlay.alpha = alpha / 255.0;
+                    overlay.alpha = alpha / 255.0;
+                    if (alpha < 255 && alpha > 0) {
+                        // Semi-transparent windows are very suspicious
+                        float transparencyScore = (255.0f - alpha) / 255.0f;
+                        overlay.confidence += transparencyScore * 0.35;
+                    }
+                    if (flags & LWA_COLORKEY) {
+                        // Color key transparency (chroma key) is suspicious
+                        overlay.confidence += 0.20;
                     }
                 }
             }
 
+            // Window size analysis - small overlays are more suspicious
+            int windowArea = overlay.bounds.w * overlay.bounds.h;
+            if (windowArea > 0 && windowArea < 10000) {  // Very small windows (< 100x100)
+                overlay.confidence += 0.15;
+            }
+
+            // Position analysis - windows at screen edges or corners are suspicious
+            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+            bool atEdge = (overlay.bounds.x <= 5 || overlay.bounds.y <= 5 ||
+                          overlay.bounds.x + overlay.bounds.w >= screenWidth - 5 ||
+                          overlay.bounds.y + overlay.bounds.h >= screenHeight - 5);
+            if (atEdge && windowArea < 50000) {  // Small windows at screen edges
+                overlay.confidence += 0.10;
+            }
+
+            // Process name analysis for known suspicious patterns
+            std::string lowerProcessName = overlay.processName;
+            std::transform(lowerProcessName.begin(), lowerProcessName.end(),
+                          lowerProcessName.begin(), ::tolower);
+
+            // Check for suspicious process name patterns
+            std::vector<std::string> suspiciousPatterns = {
+                "cheat", "hack", "overlay", "inject", "hook", "bot",
+                "trainer", "mod", "exploit", "bypass", "assist"
+            };
+
+            for (const auto& pattern : suspiciousPatterns) {
+                if (lowerProcessName.find(pattern) != std::string::npos) {
+                    overlay.confidence += 0.40;  // Very high confidence for known patterns
+                    break;
+                }
+            }
+
+            // Additional window style analysis
+            LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if (exStyle & WS_EX_TRANSPARENT) {
+                overlay.confidence += 0.25;  // Click-through windows are suspicious
+            }
+            if (exStyle & WS_EX_NOACTIVATE) {
+                overlay.confidence += 0.15;  // Non-activating windows are suspicious
+            }
+
+            // Cap confidence at 1.0
             overlay.confidence = std::min(overlay.confidence, 1.0);
 
-            if (overlay.confidence > 0.5) {
+            // Only include overlays with sufficient confidence (adjustable threshold)
+            double confidenceThreshold = 0.3;  // Lower threshold to catch more potential overlays
+            if (overlay.confidence >= confidenceThreshold) {
                 overlaysPtr->push_back(overlay);
             }
         }
@@ -616,8 +670,42 @@ double ScreenWatcher::calculateRecordingConfidence(const std::vector<ProcessInfo
 double ScreenWatcher::calculateOverlayConfidence(const std::vector<OverlayWindow>& overlayWindows) {
     if (overlayWindows.empty()) return 0.0;
 
-    double confidence = overlayWindows.size() * 0.3;
-    return std::min(confidence, 1.0);
+    double totalConfidence = 0.0;
+    double highestConfidence = 0.0;
+    int highConfidenceCount = 0;
+
+    // Analyze individual overlay confidences
+    for (const auto& overlay : overlayWindows) {
+        totalConfidence += overlay.confidence;
+        highestConfidence = std::max(highestConfidence, overlay.confidence);
+
+        if (overlay.confidence >= 0.7) {
+            highConfidenceCount++;
+        }
+    }
+
+    // Calculate overall confidence based on multiple factors
+    double averageConfidence = totalConfidence / overlayWindows.size();
+
+    // Base confidence from average individual scores
+    double overallConfidence = averageConfidence * 0.6;
+
+    // Boost confidence for multiple overlays (potential coordinated attack)
+    if (overlayWindows.size() > 1) {
+        overallConfidence += (overlayWindows.size() - 1) * 0.15;
+    }
+
+    // Significant boost for high-confidence overlays
+    if (highestConfidence >= 0.8) {
+        overallConfidence += 0.25;
+    }
+
+    // Additional boost for multiple high-confidence overlays
+    if (highConfidenceCount > 1) {
+        overallConfidence += highConfidenceCount * 0.1;
+    }
+
+    return std::min(overallConfidence, 1.0);
 }
 
 void ScreenWatcher::initializeRecordingBlacklist() {
