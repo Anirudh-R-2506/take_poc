@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <set>
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -39,7 +40,7 @@ class DeviceWatcher {
 public:
     DeviceWatcher();
     ~DeviceWatcher();
-    
+
     void Start(Napi::Function callback, int intervalMs = 2000);
     void Stop();
     bool IsRunning() const;
@@ -54,12 +55,12 @@ private:
     int intervalMs_;
     std::vector<StorageDeviceInfo> lastKnownDevices_;
     std::atomic<bool> usePolling_;
-    
+
 #ifdef _WIN32
     HWND messageWindow_;
     HDEVNOTIFY deviceNotification_;
     MSG msg_;
-    
+
     void InitializeWindowsNotifications();
     void CleanupWindowsNotifications();
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -70,7 +71,7 @@ private:
 #elif __APPLE__
     DASessionRef diskSession_;
     CFRunLoopRef runLoop_;
-    
+
     void InitializeMacOSNotifications();
     void CleanupMacOSNotifications();
     static void DiskAppearedCallback(DADiskRef disk, void* context);
@@ -81,8 +82,7 @@ private:
     StorageDeviceInfo CreateStorageDeviceInfoFromDisk(DADiskRef disk);
     bool IsExternalDevice(DADiskRef disk);
 #endif
-    
-    // Cross-platform methods
+
     void WatcherLoop();
     void PollingLoop();
     void EmitDeviceEvent(const std::string& eventType, const StorageDeviceInfo& device);
@@ -90,8 +90,6 @@ private:
     void CompareAndEmitChanges(const std::vector<StorageDeviceInfo>& currentDevices);
     std::string CreateEventJson(const std::string& eventType, const StorageDeviceInfo& device = StorageDeviceInfo("", "", "", ""));
     std::string EscapeJson(const std::string& str);
-    
-    // Utility methods
     bool DeviceExists(const std::vector<StorageDeviceInfo>& devices, const StorageDeviceInfo& target);
     std::string GenerateDeviceId(const std::string& name, const std::string& path);
 };

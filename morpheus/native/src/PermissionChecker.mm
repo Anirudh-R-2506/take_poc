@@ -16,37 +16,25 @@
 #include <winuser.h>
 #endif
 
-/**
- * Check if accessibility permission is granted
- */
 bool PermissionChecker::CheckAccessibilityPermission() {
 #ifdef __APPLE__
-    // On macOS, check if we have accessibility permission
     NSDictionary* options = @{(__bridge NSString*)kAXTrustedCheckOptionPrompt: @NO};
     Boolean isTrusted = AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options);
     return isTrusted;
 #elif _WIN32
-    // On Windows, accessibility is generally available
-    // Could check for specific accessibility features if needed
     return true;
 #else
-    // On Linux, assume accessibility is available
     return true;
 #endif
 }
 
-/**
- * Check if screen recording permission is granted
- */
 bool PermissionChecker::CheckScreenRecordingPermission() {
 #ifdef __APPLE__
-    // On macOS 10.15+, we need explicit screen recording permission
     if (@available(macOS 10.15, *)) {
         CGDisplayStreamRef stream = CGDisplayStreamCreate(
             CGMainDisplayID(), 1, 1, kCVPixelFormatType_32BGRA,
             NULL, ^(CGDisplayStreamFrameStatus status, uint64_t displayTime, 
                    IOSurfaceRef frameSurface, CGDisplayStreamUpdateRef updateRef) {
-                // Empty callback - we're just testing permission
             }
         );
         
@@ -56,32 +44,22 @@ bool PermissionChecker::CheckScreenRecordingPermission() {
         }
         return false;
     }
-    // On older macOS, screen recording is generally available
     return true;
 #elif _WIN32
-    // On Windows, screen recording is generally available
-    // Could add specific checks for Windows 10+ privacy settings
     return true;
 #else
-    // On Linux, assume screen recording is available
     return true;
 #endif
 }
 
-/**
- * Check if input monitoring permission is granted
- */
 bool PermissionChecker::CheckInputMonitoringPermission() {
 #ifdef __APPLE__
-    // On macOS 10.15+, we need explicit input monitoring permission
     if (@available(macOS 10.15, *)) {
-        // Try to create an HID manager to test input monitoring permission
         IOHIDManagerRef hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
         if (!hidManager) {
             return false;
         }
         
-        // Set matching criteria for keyboard devices
         CFMutableDictionaryRef matchingDict = CFDictionaryCreateMutable(
             kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         
@@ -96,10 +74,8 @@ bool PermissionChecker::CheckInputMonitoringPermission() {
         
         IOHIDManagerSetDeviceMatching(hidManager, matchingDict);
         
-        // Try to open the manager
         IOReturn result = IOHIDManagerOpen(hidManager, kIOHIDOptionsTypeNone);
         
-        // Clean up
         CFRelease(usagePageRef);
         CFRelease(usageRef);
         CFRelease(matchingDict);
@@ -113,41 +89,27 @@ bool PermissionChecker::CheckInputMonitoringPermission() {
         CFRelease(hidManager);
         return false;
     }
-    // On older macOS, input monitoring is generally available
     return true;
 #elif _WIN32
-    // On Windows, input monitoring is generally available
-    // Could add specific checks for Windows privacy settings
     return true;
 #else
-    // On Linux, assume input monitoring is available
     return true;
 #endif
 }
 
-/**
- * Request accessibility permission (will prompt user)
- */
 bool PermissionChecker::RequestAccessibilityPermission() {
 #ifdef __APPLE__
-    // On macOS, prompt the user for accessibility permission
     NSDictionary* options = @{(__bridge NSString*)kAXTrustedCheckOptionPrompt: @YES};
     Boolean isTrusted = AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options);
     return isTrusted;
 #else
-    // On non-macOS, assume granted
     return true;
 #endif
 }
 
-/**
- * Request screen recording permission (will prompt user)
- */
 bool PermissionChecker::RequestScreenRecordingPermission() {
 #ifdef __APPLE__
-    // On macOS 10.15+, request screen recording permission
     if (@available(macOS 10.15, *)) {
-        // The act of trying to capture will prompt for permission
         CGImageRef image = CGDisplayCreateImage(CGMainDisplayID());
         if (image) {
             CFRelease(image);
@@ -157,33 +119,23 @@ bool PermissionChecker::RequestScreenRecordingPermission() {
     }
     return true;
 #else
-    // On non-macOS, assume granted
     return true;
 #endif
 }
 
-/**
- * Request input monitoring permission (will prompt user)
- */
 bool PermissionChecker::RequestInputMonitoringPermission() {
 #ifdef __APPLE__
-    // On macOS, requesting input monitoring automatically prompts
     return CheckInputMonitoringPermission();
 #else
-    // On non-macOS, assume granted
     return true;
 #endif
 }
 
-/**
- * Open System Preferences to specific pane
- */
 void PermissionChecker::OpenSystemPreferences(const std::string& pane) {
 #ifdef __APPLE__
     std::string command = "open x-apple.systempreferences:" + pane;
     system(command.c_str());
 #elif _WIN32
-    // On Windows, open Settings app
     if (pane == "Privacy_Accessibility") {
         system("start ms-settings:easeofaccess");
     } else if (pane == "Privacy_ScreenCapture") {
@@ -196,7 +148,6 @@ void PermissionChecker::OpenSystemPreferences(const std::string& pane) {
 #endif
 }
 
-// N-API wrapper functions
 Napi::Value CheckAccessibilityPermission(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     

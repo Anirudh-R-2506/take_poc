@@ -135,12 +135,57 @@ class ProctorService {
     // Get system information
     async getSystemInfo() {
         if (!this.isConnected) return null;
-        
+
         try {
             return await window.proctorAPI.getSystemInfo();
         } catch (error) {
             console.error('[ProctorService] Error getting system info:', error);
             return null;
+        }
+    }
+
+    // Permission management methods
+    async checkPermissions() {
+        if (!this.isConnected) return null;
+
+        try {
+            return await window.proctorAPI.checkPermissions();
+        } catch (error) {
+            console.error('[ProctorService] Error checking permissions:', error);
+            return null;
+        }
+    }
+
+    async requestPermissions() {
+        if (!this.isConnected) return null;
+
+        try {
+            return await window.proctorAPI.requestPermissions();
+        } catch (error) {
+            console.error('[ProctorService] Error requesting permissions:', error);
+            return null;
+        }
+    }
+
+    async requestSpecificPermission(permissionType) {
+        if (!this.isConnected) return false;
+
+        try {
+            return await window.proctorAPI.requestSpecificPermission(permissionType);
+        } catch (error) {
+            console.error(`[ProctorService] Error requesting ${permissionType} permission:`, error);
+            return false;
+        }
+    }
+
+    async checkSpecificPermission(permissionType) {
+        if (!this.isConnected) return false;
+
+        try {
+            return await window.proctorAPI.checkSpecificPermission(permissionType);
+        } catch (error) {
+            console.error(`[ProctorService] Error checking ${permissionType} permission:`, error);
+            return false;
         }
     }
     

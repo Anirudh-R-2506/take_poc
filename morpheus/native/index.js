@@ -432,7 +432,152 @@ module.exports = {
             };
         }
     },
-    
+
+    // Permission checker functions
+    checkAccessibilityPermission: () => {
+        if (nativeAddon && nativeAddon.checkAccessibilityPermission) {
+            return nativeAddon.checkAccessibilityPermission();
+        } else {
+            console.warn('[ProctorNative] Accessibility permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkScreenRecordingPermission: () => {
+        if (nativeAddon && nativeAddon.checkScreenRecordingPermission) {
+            return nativeAddon.checkScreenRecordingPermission();
+        } else {
+            console.warn('[ProctorNative] Screen recording permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkInputMonitoringPermission: () => {
+        if (nativeAddon && nativeAddon.checkInputMonitoringPermission) {
+            return nativeAddon.checkInputMonitoringPermission();
+        } else {
+            console.warn('[ProctorNative] Input monitoring permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkRegistryPermission: () => {
+        if (nativeAddon && nativeAddon.checkRegistryPermission) {
+            return nativeAddon.checkRegistryPermission();
+        } else {
+            console.warn('[ProctorNative] Registry permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkDeviceEnumerationPermission: () => {
+        if (nativeAddon && nativeAddon.checkDeviceEnumerationPermission) {
+            return nativeAddon.checkDeviceEnumerationPermission();
+        } else {
+            console.warn('[ProctorNative] Device enumeration permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkProcessAccessPermission: () => {
+        if (nativeAddon && nativeAddon.checkProcessAccessPermission) {
+            return nativeAddon.checkProcessAccessPermission();
+        } else {
+            console.warn('[ProctorNative] Process access permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    checkClipboardPermission: () => {
+        if (nativeAddon && nativeAddon.checkClipboardPermission) {
+            return nativeAddon.checkClipboardPermission();
+        } else {
+            console.warn('[ProctorNative] Clipboard permission check not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestAccessibilityPermission: () => {
+        if (nativeAddon && nativeAddon.requestAccessibilityPermission) {
+            return nativeAddon.requestAccessibilityPermission();
+        } else {
+            console.warn('[ProctorNative] Accessibility permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestScreenRecordingPermission: () => {
+        if (nativeAddon && nativeAddon.requestScreenRecordingPermission) {
+            return nativeAddon.requestScreenRecordingPermission();
+        } else {
+            console.warn('[ProctorNative] Screen recording permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestInputMonitoringPermission: () => {
+        if (nativeAddon && nativeAddon.requestInputMonitoringPermission) {
+            return nativeAddon.requestInputMonitoringPermission();
+        } else {
+            console.warn('[ProctorNative] Input monitoring permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestRegistryPermission: () => {
+        if (nativeAddon && nativeAddon.requestRegistryPermission) {
+            return nativeAddon.requestRegistryPermission();
+        } else {
+            console.warn('[ProctorNative] Registry permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestDeviceEnumerationPermission: () => {
+        if (nativeAddon && nativeAddon.requestDeviceEnumerationPermission) {
+            return nativeAddon.requestDeviceEnumerationPermission();
+        } else {
+            console.warn('[ProctorNative] Device enumeration permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestProcessAccessPermission: () => {
+        if (nativeAddon && nativeAddon.requestProcessAccessPermission) {
+            return nativeAddon.requestProcessAccessPermission();
+        } else {
+            console.warn('[ProctorNative] Process access permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    requestClipboardPermission: () => {
+        if (nativeAddon && nativeAddon.requestClipboardPermission) {
+            return nativeAddon.requestClipboardPermission();
+        } else {
+            console.warn('[ProctorNative] Clipboard permission request not available');
+            return true; // Assume granted for fallback
+        }
+    },
+
+    detectNotificationViolation: () => {
+        if (nativeAddon && nativeAddon.detectNotificationViolation) {
+            return nativeAddon.detectNotificationViolation();
+        } else {
+            console.warn('[ProctorNative] Notification violation detection not available');
+            return false; // Assume no violation for fallback
+        }
+    },
+
+    setRecordingBlacklist: (blacklist) => {
+        if (nativeAddon && nativeAddon.setRecordingBlacklist) {
+            return nativeAddon.setRecordingBlacklist(blacklist);
+        } else {
+            console.warn('[ProctorNative] Recording blacklist setting not available');
+            return false;
+        }
+    },
+
     // Legacy compatibility functions
     start: (callback) => {
         if (nativeAddon) {

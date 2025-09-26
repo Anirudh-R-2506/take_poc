@@ -13,6 +13,22 @@
 #include <psapi.h>
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "psapi.lib")
+
+// Helper function for wide string to UTF-8 conversion (2025 best practice)
+static std::string WideStringToUtf8(const wchar_t* wideStr) {
+    if (!wideStr) return "";
+
+    int utf8Length = WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, nullptr, 0, nullptr, nullptr);
+    if (utf8Length <= 0) return "";
+
+    std::vector<char> utf8Buffer(utf8Length);
+    WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, utf8Buffer.data(), utf8Length, nullptr, nullptr);
+    return std::string(utf8Buffer.data());
+}
+
+static std::string WideStringToUtf8(const std::wstring& wideStr) {
+    return WideStringToUtf8(wideStr.c_str());
+}
 #elif __APPLE__
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
@@ -291,7 +307,7 @@ std::string ClipboardWatcher::CreateEventJson(const ClipboardEvent& event) {
     }
 
     ss << "\"isSensitive\":" << (event.isSensitive ? "true" : "false") << ",";
-    ss << "\"privacyMode\":" << static_cast<int>(privacyMode_);
+    ss << "\"privacyMode\":" << static_cast<int>(privacyMode_.load());
     ss << "}";
 
     return ss.str();
@@ -310,7 +326,7 @@ std::string ClipboardWatcher::CreateHeartbeatJson() {
     ss << "\"ts\":" << now.count() << ",";
     ss << "\"count\":" << counter_++ << ",";
     ss << "\"source\":\"native\",";
-    ss << "\"privacyMode\":" << static_cast<int>(privacyMode_);
+    ss << "\"privacyMode\":" << static_cast<int>(privacyMode_.load());
     ss << "}";
 
     return ss.str();
@@ -533,84 +549,90 @@ void ClipboardWatcher::CheckClipboardChanges() {
 std::vector<std::string> ClipboardWatcher::GetClipboardFormats() {
     std::vector<std::string> formats;
 
-    if (!OpenClipboard(nullptr)) {
-        return formats;
-    }
+    // Retry mechanism for clipboard access (2025 thread safety enhancement)
+    for (int retry = 0; retry < 3; retry++) {
+        if (OpenClipboard(nullptr)) {
+            UINT format = 0;
+            while ((format = EnumClipboardFormats(format)) != 0) {
+                wchar_t formatName[256];
 
-    UINT format = 0;
-    while ((format = EnumClipboardFormats(format)) != 0) {
-        char formatName[256];
-
-        switch (format) {
-            case CF_TEXT: formats.push_back("CF_TEXT"); break;
-            case CF_BITMAP: formats.push_back("CF_BITMAP"); break;
-            case CF_METAFILEPICT: formats.push_back("CF_METAFILEPICT"); break;
-            case CF_SYLK: formats.push_back("CF_SYLK"); break;
-            case CF_DIF: formats.push_back("CF_DIF"); break;
-            case CF_TIFF: formats.push_back("CF_TIFF"); break;
-            case CF_OEMTEXT: formats.push_back("CF_OEMTEXT"); break;
-            case CF_DIB: formats.push_back("CF_DIB"); break;
-            case CF_PALETTE: formats.push_back("CF_PALETTE"); break;
-            case CF_PENDATA: formats.push_back("CF_PENDATA"); break;
-            case CF_RIFF: formats.push_back("CF_RIFF"); break;
-            case CF_WAVE: formats.push_back("CF_WAVE"); break;
-            case CF_UNICODETEXT: formats.push_back("CF_UNICODETEXT"); break;
-            case CF_ENHMETAFILE: formats.push_back("CF_ENHMETAFILE"); break;
-            case CF_HDROP: formats.push_back("CF_HDROP"); break;
-            case CF_LOCALE: formats.push_back("CF_LOCALE"); break;
-            case CF_DIBV5: formats.push_back("CF_DIBV5"); break;
-            default:
-                if (GetClipboardFormatNameA(format, formatName, sizeof(formatName)) > 0) {
-                    formats.push_back(std::string(formatName));
-                } else {
-                    formats.push_back("UNKNOWN_" + std::to_string(format));
+                switch (format) {
+                    case CF_TEXT: formats.push_back("CF_TEXT"); break;
+                    case CF_BITMAP: formats.push_back("CF_BITMAP"); break;
+                    case CF_METAFILEPICT: formats.push_back("CF_METAFILEPICT"); break;
+                    case CF_SYLK: formats.push_back("CF_SYLK"); break;
+                    case CF_DIF: formats.push_back("CF_DIF"); break;
+                    case CF_TIFF: formats.push_back("CF_TIFF"); break;
+                    case CF_OEMTEXT: formats.push_back("CF_OEMTEXT"); break;
+                    case CF_DIB: formats.push_back("CF_DIB"); break;
+                    case CF_PALETTE: formats.push_back("CF_PALETTE"); break;
+                    case CF_PENDATA: formats.push_back("CF_PENDATA"); break;
+                    case CF_RIFF: formats.push_back("CF_RIFF"); break;
+                    case CF_WAVE: formats.push_back("CF_WAVE"); break;
+                    case CF_UNICODETEXT: formats.push_back("CF_UNICODETEXT"); break;
+                    case CF_ENHMETAFILE: formats.push_back("CF_ENHMETAFILE"); break;
+                    case CF_HDROP: formats.push_back("CF_HDROP"); break;
+                    case CF_LOCALE: formats.push_back("CF_LOCALE"); break;
+                    case CF_DIBV5: formats.push_back("CF_DIBV5"); break;
+                    default:
+                        // Use Unicode version for 2025 compatibility
+                        if (GetClipboardFormatNameW(format, formatName, sizeof(formatName) / sizeof(wchar_t)) > 0) {
+                            formats.push_back(WideStringToUtf8(formatName));
+                        } else {
+                            formats.push_back("UNKNOWN_" + std::to_string(format));
+                        }
+                        break;
                 }
-                break;
+            }
+
+            CloseClipboard();
+            break; // Success, exit retry loop
+        } else {
+            // Clipboard is locked, wait and retry
+            std::this_thread::sleep_for(std::chrono::milliseconds(10 * (retry + 1)));
         }
     }
 
-    CloseClipboard();
     return formats;
 }
 
 std::string ClipboardWatcher::ReadClipboardText(int maxLength) {
-    if (!OpenClipboard(nullptr)) {
-        return "";
-    }
-
     std::string result;
 
-    // Try Unicode text first
-    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-    if (hData) {
-        wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
-        if (pszText) {
-            // Convert to UTF-8
-            int utf8Length = WideCharToMultiByte(CP_UTF8, 0, pszText, -1, nullptr, 0, nullptr, nullptr);
-            if (utf8Length > 0) {
-                std::vector<char> utf8Buffer(utf8Length);
-                WideCharToMultiByte(CP_UTF8, 0, pszText, -1, utf8Buffer.data(), utf8Length, nullptr, nullptr);
-                result = std::string(utf8Buffer.data());
+    // Retry mechanism for clipboard access (2025 thread safety enhancement)
+    for (int retry = 0; retry < 3; retry++) {
+        if (OpenClipboard(nullptr)) {
+            // Try Unicode text first
+            HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+            if (hData) {
+                wchar_t* pszText = static_cast<wchar_t*>(GlobalLock(hData));
+                if (pszText) {
+                    result = WideStringToUtf8(pszText);
+                    GlobalUnlock(hData);
+                }
+            } else {
+                // Fallback to ANSI text
+                hData = GetClipboardData(CF_TEXT);
+                if (hData) {
+                    char* pszText = static_cast<char*>(GlobalLock(hData));
+                    if (pszText) {
+                        result = std::string(pszText);
+                        GlobalUnlock(hData);
+                    }
+                }
             }
-            GlobalUnlock(hData);
-        }
-    } else {
-        // Fallback to ANSI text
-        hData = GetClipboardData(CF_TEXT);
-        if (hData) {
-            char* pszText = static_cast<char*>(GlobalLock(hData));
-            if (pszText) {
-                result = std::string(pszText);
-                GlobalUnlock(hData);
-            }
+
+            CloseClipboard();
+            break; // Success, exit retry loop
+        } else {
+            // Clipboard is locked, wait and retry
+            std::this_thread::sleep_for(std::chrono::milliseconds(10 * (retry + 1)));
         }
     }
 
-    CloseClipboard();
-
     // Truncate if necessary
-    if (result.length() > maxLength) {
-        result = result.substr(0, maxLength);
+    if (static_cast<int>(result.length()) > maxLength) {
+        result = result.substr(0, static_cast<size_t>(maxLength));
     }
 
     return result;
@@ -621,21 +643,27 @@ std::string ClipboardWatcher::GetActiveWindowProcessName() {
     if (!hwnd) return "";
 
     DWORD processId;
-    GetWindowThreadProcessId(hwnd, &processId);
+    if (!GetWindowThreadProcessId(hwnd, &processId)) {
+        return "";
+    }
 
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+    // Use minimal permissions for security (2025 best practice)
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!hProcess) return "";
 
-    char processName[MAX_PATH];
-    DWORD size = sizeof(processName);
+    wchar_t processName[MAX_PATH];
+    DWORD size = MAX_PATH;
 
-    if (QueryFullProcessImageNameA(hProcess, 0, processName, &size)) {
+    // Use Unicode version for proper 2025 compatibility
+    if (QueryFullProcessImageNameW(hProcess, 0, processName, &size)) {
         CloseHandle(hProcess);
 
+        // Convert to UTF-8
+        std::string result = WideStringToUtf8(processName);
+
         // Extract just the filename
-        std::string fullPath(processName);
-        size_t lastSlash = fullPath.find_last_of("\\/");
-        return (lastSlash != std::string::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
+        size_t lastSlash = result.find_last_of("\\/");
+        return (lastSlash != std::string::npos) ? result.substr(lastSlash + 1) : result;
     }
 
     CloseHandle(hProcess);

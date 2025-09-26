@@ -5,9 +5,11 @@
 
 #ifdef _WIN32
 #include <winreg.h>
-// Focus Assist registry constants
-const std::string NotificationBlocker::FOCUS_ASSIST_REGISTRY_PATH = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\Cache\\DefaultAccount\\$$windows.data.notifications.quiethours$$\\Current";
-const std::string NotificationBlocker::FOCUS_ASSIST_VALUE_NAME = "Data";
+// Focus Assist registry constants - Use reliable Windows 10/11 paths
+const std::wstring NotificationBlocker::FOCUS_ASSIST_REGISTRY_PATH = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings";
+const std::wstring NotificationBlocker::FOCUS_ASSIST_VALUE_NAME = L"NOC_GLOBAL_SETTING_TOASTS_ENABLED";
+const std::wstring NotificationBlocker::FOCUS_ASSIST_BACKUP_PATH = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings";
+const std::wstring NotificationBlocker::FOCUS_ASSIST_BACKUP_VALUE = L"NOC_GLOBAL_SETTING_TOASTS_ENABLED_BACKUP";
 #endif
 
 NotificationBlocker::NotificationBlocker()
@@ -263,16 +265,16 @@ bool NotificationBlocker::SetFocusAssistState(int state)
         DWORD regValue = static_cast<DWORD>(state);
         if (!WriteFocusAssistRegistry(regValue))
         {
-            // Fallback: Try alternative registry path
+            // Fallback: Try alternative registry path with Unicode
             HKEY hKey;
-            LONG result = RegOpenKeyExA(HKEY_CURRENT_USER,
-                                        "Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings",
+            LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
+                                        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings",
                                         0, KEY_SET_VALUE, &hKey);
 
             if (result == ERROR_SUCCESS)
             {
-                DWORD focusAssistValue = (state > 0) ? 1 : 0;
-                result = RegSetValueExA(hKey, "NOC_GLOBAL_SETTING_ALLOW_NOTIFICATION_SOUND",
+                DWORD focusAssistValue = (state > 0) ? 0 : 1; // 0=disabled, 1=enabled (inverted logic for toasts)
+                result = RegSetValueExW(hKey, L"NOC_GLOBAL_SETTING_TOASTS_ENABLED",
                                         0, REG_DWORD, (BYTE *)&focusAssistValue, sizeof(DWORD));
                 RegCloseKey(hKey);
 
@@ -371,7 +373,8 @@ bool NotificationBlocker::RestoreOriginalState()
 bool NotificationBlocker::ReadFocusAssistRegistry(DWORD &value)
 {
     HKEY hKey;
-    LONG result = RegOpenKeyExA(HKEY_CURRENT_USER,
+    // Use Unicode API for 2025 compatibility
+    LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
                                 FOCUS_ASSIST_REGISTRY_PATH.c_str(),
                                 0, KEY_READ, &hKey);
 
@@ -381,7 +384,7 @@ bool NotificationBlocker::ReadFocusAssistRegistry(DWORD &value)
     }
 
     DWORD dataSize = sizeof(DWORD);
-    result = RegQueryValueExA(hKey, FOCUS_ASSIST_VALUE_NAME.c_str(),
+    result = RegQueryValueExW(hKey, FOCUS_ASSIST_VALUE_NAME.c_str(),
                               nullptr, nullptr, (BYTE *)&value, &dataSize);
 
     RegCloseKey(hKey);
@@ -390,8 +393,24 @@ bool NotificationBlocker::ReadFocusAssistRegistry(DWORD &value)
 
 bool NotificationBlocker::WriteFocusAssistRegistry(DWORD value)
 {
+    // First backup the original value
+    DWORD originalValue;
+    if (ReadFocusAssistRegistry(originalValue)) {
+        // Store backup
+        HKEY hBackupKey;
+        LONG backupResult = RegOpenKeyExW(HKEY_CURRENT_USER,
+                                          FOCUS_ASSIST_BACKUP_PATH.c_str(),
+                                          0, KEY_SET_VALUE, &hBackupKey);
+        if (backupResult == ERROR_SUCCESS) {
+            RegSetValueExW(hBackupKey, FOCUS_ASSIST_BACKUP_VALUE.c_str(),
+                          0, REG_DWORD, (BYTE *)&originalValue, sizeof(DWORD));
+            RegCloseKey(hBackupKey);
+        }
+    }
+
+    // Now set the new value using Unicode API
     HKEY hKey;
-    LONG result = RegOpenKeyExA(HKEY_CURRENT_USER,
+    LONG result = RegOpenKeyExW(HKEY_CURRENT_USER,
                                 FOCUS_ASSIST_REGISTRY_PATH.c_str(),
                                 0, KEY_SET_VALUE, &hKey);
 
@@ -400,7 +419,7 @@ bool NotificationBlocker::WriteFocusAssistRegistry(DWORD value)
         return false;
     }
 
-    result = RegSetValueExA(hKey, FOCUS_ASSIST_VALUE_NAME.c_str(),
+    result = RegSetValueExW(hKey, FOCUS_ASSIST_VALUE_NAME.c_str(),
                             0, REG_DWORD, (BYTE *)&value, sizeof(DWORD));
 
     RegCloseKey(hKey);

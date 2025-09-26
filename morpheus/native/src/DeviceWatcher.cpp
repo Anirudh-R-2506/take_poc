@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <iomanip>
 
-DeviceWatcher::DeviceWatcher() 
+DeviceWatcher::DeviceWatcher()
     : running_(false), counter_(0), intervalMs_(2000), usePolling_(false) {
 #ifdef _WIN32
     messageWindow_ = nullptr;
@@ -21,14 +21,13 @@ DeviceWatcher::~DeviceWatcher() {
 
 void DeviceWatcher::Start(Napi::Function callback, int intervalMs) {
     if (running_.load()) {
-        return; // Already running
+        return;
     }
-    
+
     running_.store(true);
     intervalMs_ = intervalMs;
     callback_ = Napi::Persistent(callback);
-    
-    // Create thread-safe function for callbacks
+
     tsfn_ = Napi::ThreadSafeFunction::New(
         callback.Env(),
         callback,
@@ -36,13 +35,11 @@ void DeviceWatcher::Start(Napi::Function callback, int intervalMs) {
         0,
         1,
         [](Napi::Env) {
-            // Finalize callback
         }
     );
-    
-    // Try to initialize platform-specific notifications first
+
     bool notificationsSuccessful = false;
-    
+
 #ifdef _WIN32
     try {
         InitializeWindowsNotifications();
@@ -58,16 +55,14 @@ void DeviceWatcher::Start(Napi::Function callback, int intervalMs) {
         notificationsSuccessful = false;
     }
 #endif
-    
+
     if (notificationsSuccessful) {
         usePolling_.store(false);
-        // Start event-driven watcher thread
         worker_thread_ = std::thread([this]() {
             WatcherLoop();
         });
     } else {
         usePolling_.store(true);
-        // Fall back to polling
         worker_thread_ = std::thread([this]() {
             PollingLoop();
         });
@@ -76,25 +71,25 @@ void DeviceWatcher::Start(Napi::Function callback, int intervalMs) {
 
 void DeviceWatcher::Stop() {
     if (!running_.load()) {
-        return; // Not running
+        return;
     }
-    
+
     running_.store(false);
-    
+
 #ifdef _WIN32
     CleanupWindowsNotifications();
 #elif __APPLE__
     CleanupMacOSNotifications();
 #endif
-    
+
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
-    
+
     if (tsfn_) {
         tsfn_.Release();
     }
-    
+
     callback_.Reset();
 }
 
@@ -108,15 +103,14 @@ std::vector<StorageDeviceInfo> DeviceWatcher::GetConnectedDevices() {
 #elif __APPLE__
     return EnumerateMacOSDevices();
 #else
-    return std::vector<StorageDeviceInfo>(); // Unsupported platform
+    return std::vector<StorageDeviceInfo>();
 #endif
 }
 
 void DeviceWatcher::WatcherLoop() {
-    // Get initial device list
     lastKnownDevices_ = GetConnectedDevices();
     EmitHeartbeat();
-    
+
 #ifdef _WIN32
     while (running_.load()) {
         if (PeekMessage(&msg_, messageWindow_, 0, 0, PM_REMOVE)) {
@@ -137,44 +131,41 @@ void DeviceWatcher::WatcherLoop() {
 void DeviceWatcher::PollingLoop() {
     lastKnownDevices_ = GetConnectedDevices();
     EmitHeartbeat();
-    
+
     auto lastHeartbeat = std::chrono::steady_clock::now();
-    
+
     while (running_.load()) {
         try {
             auto currentDevices = GetConnectedDevices();
             CompareAndEmitChanges(currentDevices);
-            
+
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastHeartbeat).count() >= 5000) {
                 EmitHeartbeat();
                 lastHeartbeat = now;
             }
-            
+
             counter_++;
         } catch (const std::exception& e) {
-            // Log error but continue polling
         }
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
     }
 }
 
 void DeviceWatcher::CompareAndEmitChanges(const std::vector<StorageDeviceInfo>& currentDevices) {
-    // Find newly connected devices
     for (const auto& current : currentDevices) {
         if (!DeviceExists(lastKnownDevices_, current)) {
             EmitDeviceEvent("device-connected", current);
         }
     }
-    
-    // Find removed devices
+
     for (const auto& previous : lastKnownDevices_) {
         if (!DeviceExists(currentDevices, previous)) {
             EmitDeviceEvent("device-removed", previous);
         }
     }
-    
+
     lastKnownDevices_ = currentDevices;
 }
 
@@ -184,9 +175,9 @@ bool DeviceWatcher::DeviceExists(const std::vector<StorageDeviceInfo>& devices, 
 
 void DeviceWatcher::EmitDeviceEvent(const std::string& eventType, const StorageDeviceInfo& device) {
     if (!tsfn_) return;
-    
+
     std::string json_str = CreateEventJson(eventType, device);
-    
+
     tsfn_.NonBlockingCall([json_str](Napi::Env env, Napi::Function callback) {
         callback.Call({Napi::String::New(env, json_str)});
     });
@@ -194,9 +185,9 @@ void DeviceWatcher::EmitDeviceEvent(const std::string& eventType, const StorageD
 
 void DeviceWatcher::EmitHeartbeat() {
     if (!tsfn_) return;
-    
+
     std::string json_str = CreateEventJson("heartbeat");
-    
+
     tsfn_.NonBlockingCall([json_str](Napi::Env env, Napi::Function callback) {
         callback.Call({Napi::String::New(env, json_str)});
     });
@@ -205,14 +196,14 @@ void DeviceWatcher::EmitHeartbeat() {
 std::string DeviceWatcher::CreateEventJson(const std::string& eventType, const StorageDeviceInfo& device) {
     std::time_t now = std::time(nullptr);
     std::ostringstream json;
-    
+
     json << "{"
          << "\"module\": \"device-watch\","
          << "\"event\": \"" << eventType << "\","
          << "\"ts\": " << (now * 1000) << ","
          << "\"count\": " << counter_.load() << ","
          << "\"source\": \"native\"";
-    
+
     if (eventType == "heartbeat") {
         json << ",\"devices\": [";
         auto devices = lastKnownDevices_;
@@ -236,7 +227,7 @@ std::string DeviceWatcher::CreateEventJson(const std::string& eventType, const S
              << "\"isExternal\": " << (device.isExternal ? "true" : "false")
              << "}";
     }
-    
+
     json << "}";
     return json.str();
 }
@@ -263,30 +254,28 @@ std::string DeviceWatcher::GenerateDeviceId(const std::string& name, const std::
 #ifdef _WIN32
 
 void DeviceWatcher::InitializeWindowsNotifications() {
-    // Create a message-only window for receiving device notifications
     const char* className = "DeviceWatcherWindowClass";
-    
+
     WNDCLASS wc = {};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(nullptr);
     wc.lpszClassName = className;
-    
+
     RegisterClass(&wc);
-    
+
     messageWindow_ = CreateWindow(
         className, "DeviceWatcher", 0, 0, 0, 0, 0,
         HWND_MESSAGE, nullptr, GetModuleHandle(nullptr), this
     );
-    
+
     if (messageWindow_) {
-        // Register for device notifications
         DEV_BROADCAST_DEVICEINTERFACE notificationFilter = {};
         notificationFilter.dbcc_size = sizeof(DEV_BROADCAST_DEVICEINTERFACE);
         notificationFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
         notificationFilter.dbcc_classguid = GUID_DEVINTERFACE_DISK;
-        
+
         deviceNotification_ = RegisterDeviceNotification(
-            messageWindow_, &notificationFilter, 
+            messageWindow_, &notificationFilter,
             DEVICE_NOTIFY_WINDOW_HANDLE
         );
     }
@@ -297,7 +286,7 @@ void DeviceWatcher::CleanupWindowsNotifications() {
         UnregisterDeviceNotification(deviceNotification_);
         deviceNotification_ = nullptr;
     }
-    
+
     if (messageWindow_) {
         DestroyWindow(messageWindow_);
         messageWindow_ = nullptr;
@@ -311,12 +300,12 @@ LRESULT CALLBACK DeviceWatcher::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
         SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(watcher));
         return 0;
     }
-    
+
     DeviceWatcher* watcher = reinterpret_cast<DeviceWatcher*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
     if (watcher && uMsg == WM_DEVICECHANGE) {
         watcher->HandleDeviceChange(wParam, lParam);
     }
-    
+
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
@@ -329,45 +318,113 @@ void DeviceWatcher::HandleDeviceChange(WPARAM wParam, LPARAM lParam) {
 
 std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateWindowsDevices() {
     std::vector<StorageDeviceInfo> devices;
-    
-    DWORD drives = GetLogicalDrives();
-    for (int i = 0; i < 26; i++) {
-        if (drives & (1 << i)) {
-            std::string driveLetter = std::string(1, 'A' + i) + ":";
-            std::string drivePath = driveLetter + "\\";
-            
-            UINT driveType = GetDriveType(drivePath.c_str());
-            if (driveType == DRIVE_REMOVABLE || driveType == DRIVE_FIXED) {
-                std::string volumeLabel = GetVolumeLabel(driveLetter);
-                std::string deviceType = (driveType == DRIVE_REMOVABLE) ? "removable" : "fixed";
-                
-                // Only include external devices for removable drives
-                if (driveType == DRIVE_REMOVABLE) {
+
+    HDEVINFO hDevInfo = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_DISK, NULL, NULL,
+                                            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+
+    if (hDevInfo == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        return devices;
+    }
+
+    SP_DEVICE_INTERFACE_DATA interfaceData = {0};
+    interfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+    for (DWORD index = 0;
+         SetupDiEnumDeviceInterfaces(hDevInfo, NULL, &GUID_DEVINTERFACE_DISK, index, &interfaceData);
+         index++) {
+
+        DWORD requiredSize = 0;
+        SetupDiGetDeviceInterfaceDetailW(hDevInfo, &interfaceData, NULL, 0, &requiredSize, NULL);
+
+        if (requiredSize == 0) continue;
+
+        std::vector<BYTE> buffer(requiredSize);
+        PSP_DEVICE_INTERFACE_DETAIL_DATA_W detailData =
+            reinterpret_cast<PSP_DEVICE_INTERFACE_DETAIL_DATA_W>(buffer.data());
+        detailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+
+        SP_DEVINFO_DATA deviceInfoData = {0};
+        deviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+
+        if (SetupDiGetDeviceInterfaceDetailW(hDevInfo, &interfaceData, detailData,
+                                           requiredSize, NULL, &deviceInfoData)) {
+
+            wchar_t description[256] = {0};
+            if (SetupDiGetDeviceRegistryPropertyW(hDevInfo, &deviceInfoData,
+                                                 SPDRP_DEVICEDESC, NULL,
+                                                 (PBYTE)description, sizeof(description), NULL)) {
+
+                std::wstring descW(description);
+                std::string descUtf8;
+                if (!descW.empty()) {
+                    int utf8Size = WideCharToMultiByte(CP_UTF8, 0, descW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Size > 0) {
+                        descUtf8.resize(utf8Size - 1);
+                        WideCharToMultiByte(CP_UTF8, 0, descW.c_str(), -1, &descUtf8[0], utf8Size, nullptr, nullptr);
+                    }
+                }
+
+                DWORD removalPolicy = 0;
+                DWORD dataType;
+                DWORD dataSize = sizeof(removalPolicy);
+                bool isRemovable = false;
+
+                if (SetupDiGetDeviceRegistryPropertyW(hDevInfo, &deviceInfoData,
+                                                     SPDRP_REMOVAL_POLICY, &dataType,
+                                                     (PBYTE)&removalPolicy, dataSize, NULL)) {
+                    isRemovable = (removalPolicy == CM_REMOVAL_POLICY_EXPECT_SURPRISE_REMOVAL ||
+                                  removalPolicy == CM_REMOVAL_POLICY_EXPECT_ORDERLY_REMOVAL);
+                }
+
+                if (isRemovable) {
+                    std::wstring devicePathW(detailData->DevicePath);
+                    std::string devicePath;
+                    if (!devicePathW.empty()) {
+                        int utf8Size = WideCharToMultiByte(CP_UTF8, 0, devicePathW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                        if (utf8Size > 0) {
+                            devicePath.resize(utf8Size - 1);
+                            WideCharToMultiByte(CP_UTF8, 0, devicePathW.c_str(), -1, &devicePath[0], utf8Size, nullptr, nullptr);
+                        }
+                    }
+
                     devices.emplace_back(
-                        GenerateDeviceId(volumeLabel.empty() ? "Removable Drive" : volumeLabel, drivePath),
-                        "usb",
-                        volumeLabel.empty() ? "Removable Drive" : volumeLabel,
-                        drivePath,
+                        GenerateDeviceId(descUtf8, devicePath),
+                        "storage",
+                        descUtf8.empty() ? "Storage Device" : descUtf8,
+                        devicePath,
                         true
                     );
                 }
             }
         }
     }
-    
+
+    SetupDiDestroyDeviceInfoList(hDevInfo);
     return devices;
 }
 
 std::string DeviceWatcher::GetVolumeLabel(const std::string& driveLetter) {
-    char volumeName[MAX_PATH + 1];
-    std::string drivePath = driveLetter + "\\";
-    
-    if (GetVolumeInformation(
-        drivePath.c_str(), volumeName, MAX_PATH + 1,
+    std::wstring drivePathW = std::wstring(driveLetter.begin(), driveLetter.end()) + L"\\";
+    wchar_t volumeNameW[MAX_PATH + 1] = {0};
+
+    if (GetVolumeInformationW(
+        drivePathW.c_str(), volumeNameW, MAX_PATH + 1,
         nullptr, nullptr, nullptr, nullptr, 0)) {
-        return std::string(volumeName);
+
+        std::wstring volNameW(volumeNameW);
+        if (!volNameW.empty()) {
+            int utf8Size = WideCharToMultiByte(CP_UTF8, 0, volNameW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (utf8Size > 0) {
+                std::string result(utf8Size - 1, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, volNameW.c_str(), -1, &result[0], utf8Size, nullptr, nullptr);
+                return result;
+            }
+        }
+    } else {
+        DWORD error = GetLastError();
     }
-    
+
     return "";
 }
 
@@ -378,11 +435,10 @@ void DeviceWatcher::InitializeMacOSNotifications() {
     if (!diskSession_) {
         return;
     }
-    
+
     runLoop_ = CFRunLoopGetCurrent();
     DASessionScheduleWithRunLoop(diskSession_, runLoop_, kCFRunLoopDefaultMode);
-    
-    // Register callbacks for disk appeared/disappeared
+
     DARegisterDiskAppearedCallback(diskSession_, nullptr, DiskAppearedCallback, this);
     DARegisterDiskDisappearedCallback(diskSession_, nullptr, DiskDisappearedCallback, this);
 }
@@ -421,32 +477,29 @@ void DeviceWatcher::HandleDiskDisappeared(DADiskRef disk) {
 
 std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
     std::vector<StorageDeviceInfo> devices;
-    
+
     CFMutableDictionaryRef matchingDict = IOServiceMatching("IOMedia");
     if (!matchingDict) {
         return devices;
     }
-    
+
     io_iterator_t iterator;
     kern_return_t result = IOServiceGetMatchingServices(kIOMasterPortDefault, matchingDict, &iterator);
     if (result != KERN_SUCCESS) {
         return devices;
     }
-    
+
     io_object_t service;
     while ((service = IOIteratorNext(iterator)) != 0) {
         CFMutableDictionaryRef properties = nullptr;
-        
+
         if (IORegistryEntryCreateCFProperties(service, &properties, kCFAllocatorDefault, kNilOptions) == KERN_SUCCESS) {
-            // Check if it's a whole disk (not a partition)
             CFBooleanRef isWholeRef = (CFBooleanRef)CFDictionaryGetValue(properties, CFSTR("Whole"));
             if (isWholeRef && CFBooleanGetValue(isWholeRef)) {
-                
-                // Check if it's removable
+
                 CFBooleanRef removableRef = (CFBooleanRef)CFDictionaryGetValue(properties, CFSTR("Removable"));
                 if (removableRef && CFBooleanGetValue(removableRef)) {
-                    
-                    // Get device name
+
                     CFStringRef nameRef = (CFStringRef)CFDictionaryGetValue(properties, CFSTR("BSD Name"));
                     std::string deviceName = "External Device";
                     if (nameRef) {
@@ -455,8 +508,7 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
                             deviceName = std::string(buffer);
                         }
                     }
-                    
-                    // Try to get volume name
+
                     DADiskRef disk = DADiskCreateFromIOMedia(kCFAllocatorDefault, diskSession_, service);
                     if (disk) {
                         CFDictionaryRef diskDescription = DADiskCopyDescription(disk);
@@ -468,8 +520,7 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
                                     deviceName = std::string(volumeBuffer);
                                 }
                             }
-                            
-                            // Get mount point
+
                             CFURLRef mountPointRef = (CFURLRef)CFDictionaryGetValue(diskDescription, kDADiskDescriptionVolumePathKey);
                             std::string mountPoint = "";
                             if (mountPointRef) {
@@ -478,7 +529,7 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
                                     mountPoint = std::string(pathBuffer);
                                 }
                             }
-                            
+
                             devices.emplace_back(
                                 GenerateDeviceId(deviceName, mountPoint),
                                 "usb",
@@ -486,7 +537,7 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
                                 mountPoint,
                                 true
                             );
-                            
+
                             CFRelease(diskDescription);
                         }
                         CFRelease(disk);
@@ -497,7 +548,7 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateMacOSDevices() {
         }
         IOObjectRelease(service);
     }
-    
+
     IOObjectRelease(iterator);
     return devices;
 }
@@ -507,11 +558,10 @@ bool DeviceWatcher::IsExternalDevice(DADiskRef disk) {
     if (!description) {
         return false;
     }
-    
-    // Check if the device is removable
+
     CFBooleanRef removable = (CFBooleanRef)CFDictionaryGetValue(description, kDADiskDescriptionMediaRemovableKey);
     bool isExternal = removable && CFBooleanGetValue(removable);
-    
+
     CFRelease(description);
     return isExternal;
 }

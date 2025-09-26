@@ -362,8 +362,10 @@ int64_t FocusIdleWatcher::GetWindowsIdleTime() {
     lii.cbSize = sizeof(LASTINPUTINFO);
 
     if (GetLastInputInfo(&lii)) {
-        DWORD currentTickCount = GetTickCount();
-        return static_cast<int64_t>(currentTickCount - lii.dwTime);
+        // Use GetTickCount64 for 64-bit tick count to avoid overflow (Windows Vista+)
+        ULONGLONG currentTickCount = GetTickCount64();
+        ULONGLONG idleTime = currentTickCount - lii.dwTime;
+        return static_cast<int64_t>(idleTime);
     }
 
     return 0;
@@ -401,17 +403,33 @@ std::string FocusIdleWatcher::GetProcessNameFromWindow(HWND hwnd) {
     DWORD processId;
     GetWindowThreadProcessId(hwnd, &processId);
 
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+    // Use minimal required permissions for security (no PROCESS_VM_READ)
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!hProcess) {
+        // Fallback for older processes
+        hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, processId);
+    }
     if (!hProcess) return "";
 
-    char processName[MAX_PATH];
-    DWORD size = sizeof(processName);
+    // Use Unicode API with extended path support
+    wchar_t processNameW[32768];  // Extended path support
+    DWORD size = sizeof(processNameW) / sizeof(wchar_t);
 
-    if (QueryFullProcessImageNameA(hProcess, 0, processName, &size)) {
+    if (QueryFullProcessImageNameW(hProcess, 0, processNameW, &size)) {
         CloseHandle(hProcess);
 
-        // Extract just the filename from the full path
-        std::string fullPath(processName);
+        // Convert Unicode to UTF-8
+        std::wstring fullPathW(processNameW);
+        std::string fullPath;
+        if (!fullPathW.empty()) {
+            int utf8Size = WideCharToMultiByte(CP_UTF8, 0, fullPathW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (utf8Size > 0) {
+                fullPath.resize(utf8Size - 1);
+                WideCharToMultiByte(CP_UTF8, 0, fullPathW.c_str(), -1, &fullPath[0], utf8Size, nullptr, nullptr);
+            }
+        }
+
+        // Extract just the filename from full path
         size_t lastSlash = fullPath.find_last_of("\\/");
         return (lastSlash != std::string::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
     }
@@ -421,13 +439,24 @@ std::string FocusIdleWatcher::GetProcessNameFromWindow(HWND hwnd) {
 }
 
 std::string FocusIdleWatcher::GetWindowTitleSafe(HWND hwnd) {
-    int titleLength = GetWindowTextLengthA(hwnd);
+    // Use Unicode API for better international support
+    int titleLength = GetWindowTextLengthW(hwnd);
     if (titleLength == 0) return "";
 
-    std::vector<char> titleBuffer(titleLength + 1);
-    GetWindowTextA(hwnd, titleBuffer.data(), titleLength + 1);
+    std::vector<wchar_t> titleBufferW(titleLength + 1);
+    GetWindowTextW(hwnd, titleBufferW.data(), titleLength + 1);
 
-    return std::string(titleBuffer.data());
+    // Convert Unicode to UTF-8
+    std::wstring titleW(titleBufferW.data());
+    if (titleW.empty()) return "";
+
+    int utf8Size = WideCharToMultiByte(CP_UTF8, 0, titleW.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (utf8Size <= 0) return "";
+
+    std::string title(utf8Size - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, titleW.c_str(), -1, &title[0], utf8Size, nullptr, nullptr);
+
+    return title;
 }
 
 bool FocusIdleWatcher::IsExamWindowMinimized() {

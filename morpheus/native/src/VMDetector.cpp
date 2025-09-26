@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <sstream>
 #include <chrono>
+#include <iomanip>
 
 VMDetector::VMDetector() : running_(false), counter_(0) {
     initializeVMSignatures();
@@ -72,7 +73,7 @@ void VMDetector::Start(Napi::Function callback, int intervalMs) {
         "VMDetector",
         0,
         1,
-        [this](Napi::Env) {
+        [](Napi::Env) {
             // Finalize callback
         }
     );
@@ -200,10 +201,14 @@ std::string VMDetector::EscapeJson(const std::string& str) {
             case '\t': escaped += "\\t"; break;
             default:
                 if (c >= 0 && c < 32) {
-                    escaped += "\\u" + std::to_string(c);
+                    // Proper Unicode escape formatting (2025 enhancement)
+                    std::stringstream ss;
+                    ss << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(c);
+                    escaped += ss.str();
                 } else {
                     escaped += c;
                 }
+                break;
         }
     }
     

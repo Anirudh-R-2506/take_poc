@@ -4,6 +4,9 @@
 #include <napi.h>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 struct BluetoothDevice {
     std::string name;
@@ -21,16 +24,16 @@ class BluetoothWatcher {
 public:
     BluetoothWatcher();
     ~BluetoothWatcher();
-    
+
     BluetoothStatus getCurrentStatus();
     std::string toJSON();
 
 private:
     BluetoothStatus getBluetoothStatusMacOS();
     BluetoothStatus getBluetoothStatusWindows();
+    std::string EscapeJsonString(const std::string& str);
 };
 
-// N-API wrapper functions
 Napi::Value GetBluetoothStatus(const Napi::CallbackInfo& info);
 
 #endif // BLUETOOTH_WATCHER_H

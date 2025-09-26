@@ -29,7 +29,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <objc/objc-runtime.h>
-// Forward declarations for Objective-C classes and types
 #ifdef __OBJC__
 @class NSPasteboard;
 @class NSString;
@@ -40,11 +39,10 @@ typedef long NSInteger;
 #endif
 #endif
 
-// Privacy modes for clipboard content handling
 enum class PrivacyMode {
-    METADATA_ONLY = 0,  // Only capture formats, attribution, timestamp
-    REDACTED = 1,       // Capture metadata + short hashed preview
-    FULL = 2            // Capture full content (requires explicit consent)
+    METADATA_ONLY = 0,
+    REDACTED = 1,
+    FULL = 2
 };
 
 struct ClipboardEvent {
@@ -64,52 +62,40 @@ class ClipboardWatcher {
 public:
     ClipboardWatcher();
     ~ClipboardWatcher();
-    
-    // Main API methods (following ProcessWatcher pattern)
+
     void Start(Napi::Function callback, int heartbeatIntervalMs = 5000);
     void Stop();
     bool IsRunning() const;
-    
-    // Privacy and control methods
     void SetPrivacyMode(PrivacyMode mode);
     PrivacyMode GetPrivacyMode() const;
     ClipboardEvent GetCurrentSnapshot();
-    
-    // Check if platform is supported
     bool isPlatformSupported();
 
 private:
-    // Cross-platform methods used by both platforms
     std::string GetActiveWindowProcessName();
     int GetActiveWindowPID();
     std::vector<std::string> GetClipboardFormats();
     std::string ReadClipboardText(int maxLength = 256);
     void CheckClipboardChanges();
 
-    // Platform-specific implementations
 #ifdef _WIN32
-    // Windows-specific methods
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     void InitializeWindowsClipboardListener();
     void CleanupWindowsClipboardListener();
     void HandleClipboardUpdate();
-    
     HWND messageWindow_;
     UINT clipboardFormatListener_;
 #elif __APPLE__
-    // macOS-specific methods
     void InitializeMacOSClipboardListener();
     void CleanupMacOSClipboardListener();
     std::string GetFrontmostApplication();
     int GetFrontmostApplicationPID();
     std::vector<std::string> GetPasteboardTypes();
     std::string ReadPasteboardText(int maxLength = 256);
-    
     void* pasteboardObserver_;
     NSInteger lastChangeCount_;
 #endif
-    
-    // Cross-platform methods
+
     void WatcherLoop();
     void EmitClipboardEvent(const ClipboardEvent& event);
     void EmitHeartbeat();
@@ -118,42 +104,27 @@ private:
     std::string CreateHeartbeatJson();
     std::string CreateErrorJson(const std::string& message);
     std::string EscapeJson(const std::string& str);
-    
-    // Privacy and content analysis
     bool IsContentSensitive(const std::string& content);
     std::string HashContent(const std::string& content);
     std::string CreateContentPreview(const std::string& content, int maxLength = 32);
-    
-    // Deduplication and rate limiting
     std::string CreateEventFingerprint(const ClipboardEvent& event);
     bool ShouldEmitEvent(const std::string& fingerprint);
     void UpdateFingerprintCache(const std::string& fingerprint);
-    
-    // Thread management (following ProcessWatcher pattern)
     std::atomic<bool> running_;
     std::atomic<int> counter_;
     std::thread worker_thread_;
     Napi::FunctionReference callback_;
     Napi::ThreadSafeFunction tsfn_;
     int heartbeatIntervalMs_;
-    
-    // Privacy settings
     std::atomic<PrivacyMode> privacyMode_;
-    
-    // Rate limiting and deduplication
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> fingerprintCache_;
     std::chrono::milliseconds minEventInterval_;
     std::chrono::steady_clock::time_point lastEventTime_;
-    
-    // Content sensitivity patterns
     std::vector<std::string> sensitivePatterns_;
-    void InitializeSensitivePatterns();
-    
-    // Current clipboard state
     ClipboardEvent lastEvent_;
     std::atomic<bool> hasNewData_;
-    
-    // Helper methods
+
+    void InitializeSensitivePatterns();
     void ProcessClipboardChange();
     std::string GetCurrentTimestamp();
     void CleanupOldFingerprints();

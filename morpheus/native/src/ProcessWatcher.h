@@ -32,11 +32,7 @@ public:
     void SetBlacklist(const std::vector<std::string>& blacklist);
     void SetRecordingBlacklist(const std::vector<std::string>& recordingBlacklist);
     bool IsRunning() const;
-    
-    // Public snapshot methods for polling mode
     std::vector<ProcessInfo> GetProcessSnapshot();
-    
-    // Recording/Overlay detection methods
     RecordingDetectionResult DetectRecordingAndOverlays();
     std::vector<std::string> GetVirtualCameras();
     std::vector<OverlayWindow> GetOverlayWindows();
@@ -58,21 +54,17 @@ private:
     std::vector<OverlayWindow> lastOverlayWindows_;
     double recordingConfidenceThreshold_;
     double overlayConfidenceThreshold_;
-    
+
     void WatcherLoop();
     std::vector<ProcessInfo> GetRunningProcesses();
     std::vector<ProcessInfo> FilterBlacklistedProcesses(const std::vector<ProcessInfo>& processes);
     void EmitDetectionEvent(bool detected, const std::vector<ProcessInfo>& blacklistedProcesses);
-    
-    // Recording/Overlay detection methods
     std::vector<ProcessInfo> DetectRecordingProcesses(const std::vector<ProcessInfo>& processes);
     std::vector<OverlayWindow> DetectOverlayWindows();
     double CalculateRecordingConfidence(const std::vector<ProcessInfo>& recordingProcesses, const std::vector<std::string>& virtualCameras);
     double CalculateOverlayConfidence(const std::vector<OverlayWindow>& overlayWindows);
     void EmitRecordingOverlayEvent(const RecordingDetectionResult& result);
     void InitializeRecordingBlacklist();
-    
-    // Platform-specific helper methods
 #ifdef _WIN32
     std::string GetProcessPath(DWORD processID);
     std::vector<std::string> GetProcessModules(DWORD processID);
@@ -84,8 +76,7 @@ private:
     std::vector<OverlayWindow> EnumerateWindowsForOverlays();
     std::vector<std::string> EnumerateVirtualCameras();
 #endif
-    
-    // Utility methods
+
     std::string EscapeJson(const std::string& str);
     std::string CreateRecordingOverlayEventJson(const RecordingDetectionResult& result);
 };

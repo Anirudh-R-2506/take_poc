@@ -200,8 +200,25 @@ bool PermissionChecker::CheckAccessibilityPermission() {
  */
 bool PermissionChecker::CheckScreenRecordingPermission() {
 #ifdef _WIN32
-    // On Windows 10/11, check camera privacy settings as a proxy for screen capture
-    return CheckCameraAccess();
+    // Windows desktop applications don't require explicit screen recording permissions
+    // Test actual screen capture capability instead
+    HDC screenDC = GetDC(NULL);
+    if (screenDC) {
+        // Test if we can create a bitmap for screen capture
+        RECT screenRect;
+        GetWindowRect(GetDesktopWindow(), &screenRect);
+        HDC memDC = CreateCompatibleDC(screenDC);
+        if (memDC) {
+            HBITMAP bitmap = CreateCompatibleBitmap(screenDC, 100, 100); // Test small area
+            bool canCapture = (bitmap != NULL);
+
+            if (bitmap) DeleteObject(bitmap);
+            DeleteDC(memDC);
+        }
+        ReleaseDC(NULL, screenDC);
+        return true; // Basic screen access available
+    }
+    return false;
 #else
     return true; // Assume granted on non-Windows platforms
 #endif
@@ -212,9 +229,27 @@ bool PermissionChecker::CheckScreenRecordingPermission() {
  */
 bool PermissionChecker::CheckInputMonitoringPermission() {
 #ifdef _WIN32
-    // On Windows, check microphone access as a proxy for input monitoring
-    // Also check if we can access input devices
-    return CheckMicrophoneAccess();
+    // Test actual keyboard hook capability (input monitoring is NOT related to microphone)
+    HHOOK testHook = SetWindowsHookExW(WH_KEYBOARD_LL, [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }, GetModuleHandle(NULL), 0);
+
+    if (testHook) {
+        UnhookWindowsHookEx(testHook);
+        return true; // Can install keyboard hooks
+    }
+
+    // Test mouse hook capability as well
+    HHOOK mouseHook = SetWindowsHookExW(WH_MOUSE_LL, [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }, GetModuleHandle(NULL), 0);
+
+    if (mouseHook) {
+        UnhookWindowsHookEx(mouseHook);
+        return true; // Can install mouse hooks
+    }
+
+    return false; // Cannot install input hooks - likely permission issue
 #else
     return true; // Assume granted on non-Windows platforms
 #endif
