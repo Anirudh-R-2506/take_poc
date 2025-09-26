@@ -10,7 +10,7 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\"",
-    "build-native": "cd morpheus/native && yarn install --check-files && yarn build",
+    "build-native": "cd morpheus/native && yarn build",
     "rebuild-electron": "yarn electron-rebuild -f -w proctor_native",
     "setup-morpheus": "yarn build-native || echo 'Native build failed, will use fallback'",
     "dev": "yarn setup-morpheus && yarn start",
