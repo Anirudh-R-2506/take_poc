@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <string>
 #include <atomic>
+#include <chrono>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -77,6 +78,9 @@ private:
     std::atomic<bool> userModifiedState_;
     NotificationBlockState currentState_;
     std::string lastError_;
+    std::chrono::steady_clock::time_point lastProgrammaticChange_;
+    int lastKnownState_;
+    static const int GRACE_PERIOD_MS = 5000; // 5 seconds grace period after programmatic changes
     int64_t lastStateChangeTime_;
 
     int64_t GetCurrentTimestamp();

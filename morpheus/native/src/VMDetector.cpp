@@ -242,10 +242,41 @@ VMDetectionResult VMDetector::detectVirtualMachine() {
         if (macCheck) result.vmIndicators.push_back("VM MAC address");
         if (!vmProcesses.empty()) result.vmIndicators.push_back("VM processes running");
         
-        // Determine if we're in a VM
-        result.isInsideVM = hypervisorBit || biosCheck || macCheck;
-        result.detectedVM = identifyWindowsVM(result.vmIndicators);
-        result.detectionMethod = "Windows native detection";
+        // Enhanced VM detection scoring to minimize false positives
+        int confidenceScore = 0;
+
+        // Hypervisor bit is the most reliable indicator (CPUID leaf 1, ECX bit 31)
+        if (hypervisorBit) confidenceScore += 40;
+
+        // BIOS/System manufacturer check is very reliable
+        if (biosCheck) confidenceScore += 35;
+
+        // VM processes running are highly reliable
+        if (!vmProcesses.empty()) {
+            confidenceScore += 30;
+            // Additional points for multiple VM processes
+            if (vmProcesses.size() > 1) confidenceScore += 10;
+        }
+
+        // MAC address check gets lower weight due to potential false positives
+        if (macCheck) confidenceScore += 15;
+
+        // Log the confidence calculation for debugging
+        std::cout << "[VMDetector] VM Detection Confidence Score: " << confidenceScore << "/100" << std::endl;
+        std::cout << "[VMDetector] - Hypervisor bit: " << (hypervisorBit ? "40" : "0") << std::endl;
+        std::cout << "[VMDetector] - BIOS check: " << (biosCheck ? "35" : "0") << std::endl;
+        std::cout << "[VMDetector] - VM processes: " << (!vmProcesses.empty() ? "30+" : "0") << std::endl;
+        std::cout << "[VMDetector] - MAC check: " << (macCheck ? "15" : "0") << std::endl;
+
+        // Only consider VM if confidence score is 50 or higher (requires multiple strong indicators)
+        // This threshold ensures we need at least:
+        // - Hypervisor bit (40) + MAC (15) = 55, OR
+        // - BIOS check (35) + MAC (15) = 50, OR
+        // - VM processes (30) + BIOS (35) = 65, OR
+        // - VM processes (30) + Hypervisor (40) = 70
+        result.isInsideVM = confidenceScore >= 50;
+        result.detectedVM = result.isInsideVM ? identifyWindowsVM(result.vmIndicators) : "None";
+        result.detectionMethod = "Windows native detection (confidence: " + std::to_string(confidenceScore) + "/100)";
         
 #elif __APPLE__
         std::cout << "[VMDetector] Running macOS VM detection" << std::endl;
@@ -308,44 +339,74 @@ bool VMDetector::checkWindowsBIOS() {
         HKEY hKey;
         char buffer[512];
         DWORD bufferSize = sizeof(buffer);
-        
+        bool vmDetected = false;
+
         // Check BIOS vendor
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
-                         "HARDWARE\\DESCRIPTION\\System\\BIOS", 
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                         "HARDWARE\\DESCRIPTION\\System\\BIOS",
                          0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            
-            if (RegQueryValueExA(hKey, "SystemManufacturer", NULL, NULL, 
+
+            // Check System Manufacturer
+            if (RegQueryValueExA(hKey, "SystemManufacturer", NULL, NULL,
                                (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
                 std::string manufacturer(buffer);
                 std::cout << "[VMDetector] System manufacturer: " << manufacturer << std::endl;
-                
-                for (const auto& vmString : vmVendorStrings) {
-                    if (manufacturer.find(vmString) != std::string::npos) {
-                        RegCloseKey(hKey);
-                        return true;
+
+                // Be more specific - exclude common physical system manufacturers
+                std::vector<std::string> physicalManufacturers = {
+                    "Dell", "HP", "Lenovo", "ASUS", "MSI", "Gigabyte",
+                    "Intel", "AMD", "Apple", "Acer", "Toshiba", "Sony",
+                    "Samsung", "LG", "Fujitsu", "Panasonic", "Gateway"
+                };
+
+                bool isPhysicalManufacturer = false;
+                for (const auto& physical : physicalManufacturers) {
+                    if (manufacturer.find(physical) != std::string::npos) {
+                        isPhysicalManufacturer = true;
+                        break;
+                    }
+                }
+
+                // Only flag VM vendors, not physical manufacturers
+                if (!isPhysicalManufacturer) {
+                    for (const auto& vmString : vmVendorStrings) {
+                        if (manufacturer.find(vmString) != std::string::npos) {
+                            std::cout << "[VMDetector] VM manufacturer detected: " << vmString << std::endl;
+                            vmDetected = true;
+                            break;
+                        }
                     }
                 }
             }
-            
-            // Check BIOS version
-            bufferSize = sizeof(buffer);
-            if (RegQueryValueExA(hKey, "BIOSVersion", NULL, NULL, 
-                               (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
-                std::string biosVersion(buffer);
-                std::cout << "[VMDetector] BIOS version: " << biosVersion << std::endl;
-                
-                for (const auto& vmString : vmVendorStrings) {
-                    if (biosVersion.find(vmString) != std::string::npos) {
-                        RegCloseKey(hKey);
-                        return true;
+
+            // Check BIOS version - be more specific
+            if (!vmDetected) {
+                bufferSize = sizeof(buffer);
+                if (RegQueryValueExA(hKey, "BIOSVersion", NULL, NULL,
+                                   (LPBYTE)buffer, &bufferSize) == ERROR_SUCCESS) {
+                    std::string biosVersion(buffer);
+                    std::cout << "[VMDetector] BIOS version: " << biosVersion << std::endl;
+
+                    // Only check for very specific VM BIOS signatures
+                    std::vector<std::string> vmBiosSignatures = {
+                        "VMware", "VirtualBox", "VBOX", "Parallels", "QEMU",
+                        "Xen", "Hyper-V", "Bochs"
+                    };
+
+                    for (const auto& vmBios : vmBiosSignatures) {
+                        if (biosVersion.find(vmBios) != std::string::npos) {
+                            std::cout << "[VMDetector] VM BIOS signature detected: " << vmBios << std::endl;
+                            vmDetected = true;
+                            break;
+                        }
                     }
                 }
             }
-            
+
             RegCloseKey(hKey);
         }
-        
-        return false;
+
+        return vmDetected;
     } catch (...) {
         std::cout << "[VMDetector] BIOS check failed" << std::endl;
         return false;
@@ -356,17 +417,33 @@ bool VMDetector::checkWindowsMAC() {
     try {
         DWORD dwSize = 0;
         GetAdaptersInfo(NULL, &dwSize);
-        
+
         if (dwSize == 0) return false;
-        
+
         PIP_ADAPTER_INFO pAdapterInfo = (IP_ADAPTER_INFO*)malloc(dwSize);
         if (!pAdapterInfo) return false;
-        
+
         bool vmMacFound = false;
+        int vmMacCount = 0;
+
         if (GetAdaptersInfo(pAdapterInfo, &dwSize) == ERROR_SUCCESS) {
             PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
-            
+
             while (pAdapter) {
+                // Skip certain adapter types that are not likely to be VM indicators
+                std::string adapterName = pAdapter->AdapterName;
+                std::string description = pAdapter->Description;
+
+                // Skip loopback, tunnel, and Microsoft virtual adapters (not VM indicators)
+                if (description.find("Loopback") != std::string::npos ||
+                    description.find("Tunnel") != std::string::npos ||
+                    description.find("Microsoft") != std::string::npos ||
+                    description.find("TAP") != std::string::npos ||
+                    pAdapter->Type == MIB_IF_TYPE_LOOPBACK) {
+                    pAdapter = pAdapter->Next;
+                    continue;
+                }
+
                 // Convert MAC address to string
                 std::stringstream macStream;
                 macStream << std::hex << std::setfill('0');
@@ -374,27 +451,35 @@ bool VMDetector::checkWindowsMAC() {
                     if (i > 0) macStream << ":";
                     macStream << std::setw(2) << (unsigned int)pAdapter->Address[i];
                 }
-                
+
                 std::string macPrefix = macStream.str();
                 std::transform(macPrefix.begin(), macPrefix.end(), macPrefix.begin(), ::toupper);
-                
-                std::cout << "[VMDetector] Found MAC prefix: " << macPrefix << std::endl;
-                
+
+                std::cout << "[VMDetector] Checking adapter '" << description << "' with MAC prefix: " << macPrefix << std::endl;
+
                 for (const auto& vmMac : vmMACPrefixes) {
                     std::string vmMacUpper = vmMac;
                     std::transform(vmMacUpper.begin(), vmMacUpper.end(), vmMacUpper.begin(), ::toupper);
-                    
+
                     if (macPrefix == vmMacUpper) {
-                        vmMacFound = true;
+                        vmMacCount++;
+                        std::cout << "[VMDetector] Found potential VM MAC on adapter: " << description << std::endl;
                         break;
                     }
                 }
-                
-                if (vmMacFound) break;
+
                 pAdapter = pAdapter->Next;
             }
         }
-        
+
+        // Only consider it a VM indicator if we find VM MAC addresses on physical adapters
+        // Require at least one VM MAC to be flagged, but this will be weighted low in final decision
+        vmMacFound = vmMacCount >= 1;
+
+        if (vmMacFound) {
+            std::cout << "[VMDetector] Found " << vmMacCount << " potential VM MAC address(es)" << std::endl;
+        }
+
         free(pAdapterInfo);
         return vmMacFound;
     } catch (...) {

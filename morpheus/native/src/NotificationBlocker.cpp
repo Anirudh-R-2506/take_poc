@@ -14,7 +14,8 @@ const std::wstring NotificationBlocker::FOCUS_ASSIST_BACKUP_VALUE = L"NOC_GLOBAL
 
 NotificationBlocker::NotificationBlocker()
     : examActive_(false), notificationsBlocked_(false), userModifiedState_(false),
-      currentState_(NotificationBlockState::DISABLED), lastStateChangeTime_(0)
+      currentState_(NotificationBlockState::DISABLED), lastStateChangeTime_(0),
+      lastProgrammaticChange_(std::chrono::steady_clock::now()), lastKnownState_(-1)
 #ifdef _WIN32
       ,
       originalFocusAssistState_(0), hasBackup_(false)
@@ -56,6 +57,10 @@ bool NotificationBlocker::EnableNotificationBlocking()
             return false;
         }
 
+        // Track our programmatic change to prevent false violation detection
+        lastProgrammaticChange_ = std::chrono::steady_clock::now();
+        lastKnownState_ = 2;
+
         notificationsBlocked_ = true;
         UpdateState(NotificationBlockState::ENABLED, "exam-started");
         std::cout << "[NotificationBlocker] Windows Focus Assist enabled successfully" << std::endl;
@@ -93,6 +98,10 @@ bool NotificationBlocker::DisableNotificationBlocking()
             lastError_ = "Failed to restore original Focus Assist state";
             return false;
         }
+
+        // Track our programmatic change to prevent false violation detection
+        lastProgrammaticChange_ = std::chrono::steady_clock::now();
+        lastKnownState_ = originalFocusAssistState_;
 
         notificationsBlocked_ = false;
         UpdateState(NotificationBlockState::DISABLED, "exam-ended");
@@ -135,6 +144,9 @@ bool NotificationBlocker::ResetToOriginalState()
                 lastError_ = "Failed to reset Focus Assist to default state";
                 return false;
             }
+            // Track our programmatic change
+            lastProgrammaticChange_ = std::chrono::steady_clock::now();
+            lastKnownState_ = 0;
         }
         else
         {
@@ -144,6 +156,9 @@ bool NotificationBlocker::ResetToOriginalState()
                 lastError_ = "Failed to restore Focus Assist to original state: " + std::to_string(originalFocusAssistState_);
                 return false;
             }
+            // Track our programmatic change
+            lastProgrammaticChange_ = std::chrono::steady_clock::now();
+            lastKnownState_ = originalFocusAssistState_;
             std::cout << "[NotificationBlocker] Windows Focus Assist restored to original state: " << originalFocusAssistState_ << std::endl;
         }
 
@@ -189,13 +204,31 @@ NotificationEvent NotificationBlocker::GetCurrentState()
 #ifdef _WIN32
     // Check if user manually changed Focus Assist state
     int currentState = GetFocusAssistState();
+
+    // Check if this change happened within our grace period after a programmatic change
+    auto now = std::chrono::steady_clock::now();
+    auto timeSinceLastChange = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastProgrammaticChange_).count();
+    bool withinGracePeriod = timeSinceLastChange < GRACE_PERIOD_MS;
+
     if (examActive_.load() && currentState != 2)
     {
-        // User manually disabled Focus Assist during exam
-        event.eventType = "violation";
-        event.reason = "user-disabled-focus-assist";
-        event.userModified = true;
-        userModifiedState_ = true;
+        // Only report as violation if not within grace period and state actually changed from our expected state
+        if (!withinGracePeriod && lastKnownState_ == 2)
+        {
+            // User manually disabled Focus Assist during exam
+            event.eventType = "violation";
+            event.reason = "user-disabled-focus-assist";
+            event.userModified = true;
+            userModifiedState_ = true;
+            std::cout << "[NotificationBlocker] Genuine user violation detected: Focus Assist changed from 2 to " << currentState << std::endl;
+        }
+        else
+        {
+            // Within grace period or expected state change - not a violation
+            event.eventType = "notification-settings-changed";
+            event.reason = "focus-assist-transitioning";
+            std::cout << "[NotificationBlocker] Focus Assist state change detected but within grace period or expected change" << std::endl;
+        }
     }
     else if (notificationsBlocked_.load())
     {
@@ -206,6 +239,12 @@ NotificationEvent NotificationBlocker::GetCurrentState()
     {
         event.eventType = "notification-enabled";
         event.reason = "focus-assist-disabled";
+    }
+
+    // Update our tracking if state actually changed
+    if (currentState != lastKnownState_)
+    {
+        lastKnownState_ = currentState;
     }
 #elif __APPLE__
     if (notificationsBlocked_.load())
@@ -230,12 +269,32 @@ bool NotificationBlocker::DetectUserModification()
         return false;
 
     int currentState = GetFocusAssistState();
+
+    // Check if this change happened within our grace period after a programmatic change
+    auto now = std::chrono::steady_clock::now();
+    auto timeSinceLastChange = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastProgrammaticChange_).count();
+    bool withinGracePeriod = timeSinceLastChange < GRACE_PERIOD_MS;
+
     // During exam, Focus Assist should be in "Alarms only" mode (2)
     if (currentState != 2)
     {
-        userModifiedState_ = true;
-        std::cout << "[NotificationBlocker] User modification detected: Focus Assist changed to " << currentState << std::endl;
-        return true;
+        // Only consider it a user modification if not within grace period and we expected state 2
+        if (!withinGracePeriod && lastKnownState_ == 2)
+        {
+            userModifiedState_ = true;
+            std::cout << "[NotificationBlocker] User modification detected: Focus Assist changed from 2 to " << currentState << std::endl;
+            return true;
+        }
+        else
+        {
+            std::cout << "[NotificationBlocker] Focus Assist change detected but within grace period - not user modification" << std::endl;
+        }
+    }
+
+    // Update our tracking if state changed
+    if (currentState != lastKnownState_)
+    {
+        lastKnownState_ = currentState;
     }
 #endif
     return false;
