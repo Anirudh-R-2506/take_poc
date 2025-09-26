@@ -4,6 +4,7 @@
 #include <chrono>
 #include <algorithm>
 #include <ctime>
+#include <regex>
 
 #ifdef _WIN32
 #include <tlhelp32.h>
@@ -300,6 +301,41 @@ void ScreenWatcher::watcherLoop() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(checkIntervalMs));
     }
+}
+
+std::string ScreenWatcher::sanitizeDeviceName(const std::string& name) {
+    std::string sanitized = name;
+
+    // Remove null characters and control characters that could break JSON or cause issues
+    sanitized.erase(std::remove_if(sanitized.begin(), sanitized.end(),
+                   [](char c) {
+                       // Remove characters that are:
+                       // - Control characters (< 32)
+                       // - Extended ASCII that might cause encoding issues (> 126)
+                       // - Specific problematic characters for JSON/security
+                       return c < 32 || c > 126 || c == '\'' || c == '\"' || c == '\\';
+                   }), sanitized.end());
+
+    // Trim leading and trailing whitespace
+    sanitized.erase(0, sanitized.find_first_not_of(" \t\r\n"));
+    sanitized.erase(sanitized.find_last_not_of(" \t\r\n") + 1);
+
+    // Replace multiple consecutive spaces with single space
+    std::regex multipleSpaces("\\s+");
+    sanitized = std::regex_replace(sanitized, multipleSpaces, " ");
+
+    // Limit length to prevent buffer overflow attacks or excessively long device names
+    const size_t MAX_DEVICE_NAME_LENGTH = 256;
+    if (sanitized.length() > MAX_DEVICE_NAME_LENGTH) {
+        sanitized = sanitized.substr(0, MAX_DEVICE_NAME_LENGTH);
+    }
+
+    // If the name becomes empty after sanitization, provide a default
+    if (sanitized.empty()) {
+        sanitized = "Unknown Device";
+    }
+
+    return sanitized;
 }
 
 std::string ScreenWatcher::statusToJson(const ScreenStatus& status) {

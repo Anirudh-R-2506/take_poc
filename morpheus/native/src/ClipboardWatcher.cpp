@@ -366,7 +366,7 @@ bool ClipboardWatcher::IsContentSensitive(const std::string& content) {
             if (std::regex_search(content, re)) {
                 return true;
             }
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             // If regex fails, continue with other patterns
             continue;
         }

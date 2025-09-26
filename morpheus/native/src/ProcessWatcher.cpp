@@ -352,6 +352,170 @@ RecordingDetectionResult ProcessWatcher::DetectRecordingAndOverlays() {
     return result;
 }
 
+std::vector<OverlayWindow> ProcessWatcher::DetectOverlayWindows() {
+    std::vector<OverlayWindow> overlays;
+
+#ifdef _WIN32
+    // Process-centric overlay detection focuses on windows created by suspicious processes
+    // This complements ScreenWatcher's window-centric overlay detection
+    std::vector<ProcessInfo> currentProcesses = GetRunningProcesses();
+
+    // First, identify suspicious processes that might create overlays
+    std::vector<ProcessInfo> suspiciousProcesses;
+    std::set<std::string> suspiciousPatterns = {
+        "cheat", "hack", "trainer", "mod", "inject", "dll", "hook",
+        "overlay", "bot", "assist", "auto", "exploit", "bypass",
+        "memory", "edit", "scan", "patch", "debug"
+    };
+
+    for (const auto& process : currentProcesses) {
+        std::string lowerName = process.name;
+        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+        for (const auto& pattern : suspiciousPatterns) {
+            if (lowerName.find(pattern) != std::string::npos) {
+                suspiciousProcesses.push_back(process);
+                break;
+            }
+        }
+    }
+
+    // Now enumerate windows and correlate with suspicious processes
+    auto contextPair = std::make_pair(&overlays, &suspiciousProcesses);
+    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+        auto* context = reinterpret_cast<std::pair<std::vector<OverlayWindow>*, std::vector<ProcessInfo>*>*>(lParam);
+        auto* overlaysPtr = context->first;
+        auto* suspiciousProcessesPtr = context->second;
+
+        if (!IsWindowVisible(hwnd)) {
+            return TRUE;
+        }
+
+        // Get window's process ID
+        DWORD windowPid;
+        GetWindowThreadProcessId(hwnd, &windowPid);
+
+        // Check if this window belongs to a suspicious process
+        bool isSuspiciousProcess = false;
+        std::string suspiciousProcessName;
+        for (const auto& suspProcess : *suspiciousProcessesPtr) {
+            if (suspProcess.pid == static_cast<int>(windowPid)) {
+                isSuspiciousProcess = true;
+                suspiciousProcessName = suspProcess.name;
+                break;
+            }
+        }
+
+        LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+
+        bool isLayered = (exStyle & WS_EX_LAYERED) != 0;
+        bool isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
+        bool isToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
+        bool isTransparent = (exStyle & WS_EX_TRANSPARENT) != 0;
+        bool isNoActivate = (exStyle & WS_EX_NOACTIVATE) != 0;
+
+        // Process-centric detection: Focus on overlay characteristics + suspicious processes
+        bool hasOverlayCharacteristics = isLayered || isTopmost || isToolWindow ||
+                                        isTransparent || isNoActivate;
+
+        // Include windows that either:
+        // 1. Belong to suspicious processes (regardless of overlay characteristics)
+        // 2. Have overlay characteristics (regardless of process)
+        if (!isSuspiciousProcess && !hasOverlayCharacteristics) {
+            return TRUE;
+        }
+
+        OverlayWindow overlay;
+
+        // Get process information
+        overlay.pid = static_cast<int>(windowPid);
+        if (isSuspiciousProcess) {
+            overlay.processName = suspiciousProcessName;
+        } else {
+            // Get process name for non-suspicious processes with overlay characteristics
+            HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, windowPid);
+            if (hProcess) {
+                wchar_t processPath[MAX_PATH];
+                DWORD pathSize = MAX_PATH;
+                if (QueryFullProcessImageNameW(hProcess, 0, processPath, &pathSize)) {
+                    std::wstring processPathW(processPath);
+                    std::string processPathStr(processPathW.begin(), processPathW.end());
+                    size_t lastSlash = processPathStr.find_last_of("\\/");
+                    overlay.processName = (lastSlash != std::string::npos) ?
+                        processPathStr.substr(lastSlash + 1) : processPathStr;
+                }
+                CloseHandle(hProcess);
+            }
+        }
+
+        // Get window geometry
+        RECT rect;
+        if (GetWindowRect(hwnd, &rect)) {
+            overlay.bounds.x = rect.left;
+            overlay.bounds.y = rect.top;
+            overlay.bounds.w = rect.right - rect.left;
+            overlay.bounds.h = rect.bottom - rect.top;
+        }
+
+        // Get window handle
+        std::ostringstream oss;
+        oss << "0x" << std::hex << reinterpret_cast<uintptr_t>(hwnd);
+        overlay.windowHandle = oss.str();
+
+        // Calculate confidence with process-centric weighting
+        overlay.confidence = 0.0;
+
+        // Heavy penalty for suspicious process names
+        if (isSuspiciousProcess) {
+            overlay.confidence += 0.60;  // Very high base confidence for known suspicious processes
+        }
+
+        // Standard overlay characteristics
+        if (isLayered) overlay.confidence += 0.20;
+        if (isTopmost) overlay.confidence += 0.25;
+        if (isToolWindow) overlay.confidence += 0.15;
+        if (isTransparent) overlay.confidence += 0.30;  // Click-through overlays are very suspicious
+        if (isNoActivate) overlay.confidence += 0.15;
+
+        // Size-based scoring (small overlays are more suspicious)
+        int area = overlay.bounds.w * overlay.bounds.h;
+        if (area > 0 && area < 10000) {  // Very small windows
+            overlay.confidence += 0.20;
+        } else if (area < 50000) {  // Small windows
+            overlay.confidence += 0.10;
+        }
+
+        // Transparency analysis for layered windows
+        if (isLayered) {
+            COLORREF colorKey;
+            BYTE alpha;
+            DWORD flags;
+            if (GetLayeredWindowAttributes(hwnd, &colorKey, &alpha, &flags)) {
+                overlay.alpha = alpha / 255.0;
+                if (alpha < 255 && alpha > 0) {
+                    float transparencyScore = (255.0f - alpha) / 255.0f;
+                    overlay.confidence += transparencyScore * 0.25;
+                }
+            }
+        }
+
+        // Cap confidence
+        overlay.confidence = std::min(overlay.confidence, 1.0);
+
+        // Process-centric threshold: lower threshold due to process correlation
+        if (overlay.confidence >= 0.25) {
+            overlaysPtr->push_back(overlay);
+        }
+
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&contextPair));
+
+#endif // _WIN32
+
+    return overlays;
+}
+
 std::vector<ProcessInfo> ProcessWatcher::DetectRecordingProcesses(const std::vector<ProcessInfo>& processes) {
     std::vector<ProcessInfo> recordingProcesses;
 
