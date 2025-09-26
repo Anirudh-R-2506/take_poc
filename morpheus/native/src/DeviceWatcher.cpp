@@ -146,7 +146,7 @@ void DeviceWatcher::PollingLoop() {
             }
 
             counter_++;
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
@@ -373,6 +373,9 @@ std::vector<StorageDeviceInfo> DeviceWatcher::EnumerateWindowsDevices() {
                 if (SetupDiGetDeviceRegistryPropertyW(hDevInfo, &deviceInfoData,
                                                      SPDRP_REMOVAL_POLICY, &dataType,
                                                      (PBYTE)&removalPolicy, dataSize, NULL)) {
+                    // CM_REMOVAL_POLICY constants for compatibility across Windows SDK versions
+                    const DWORD CM_REMOVAL_POLICY_EXPECT_SURPRISE_REMOVAL = 3;
+                    const DWORD CM_REMOVAL_POLICY_EXPECT_ORDERLY_REMOVAL = 4;
                     isRemovable = (removalPolicy == CM_REMOVAL_POLICY_EXPECT_SURPRISE_REMOVAL ||
                                   removalPolicy == CM_REMOVAL_POLICY_EXPECT_ORDERLY_REMOVAL);
                 }

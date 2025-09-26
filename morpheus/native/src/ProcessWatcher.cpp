@@ -129,7 +129,7 @@ void ProcessWatcher::WatcherLoop() {
             }
 
             counter_++;
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
@@ -345,7 +345,7 @@ RecordingDetectionResult ProcessWatcher::DetectRecordingAndOverlays() {
 
         lastOverlayWindows_ = result.overlayWindows;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
         result.eventType = "error";
     }
 
