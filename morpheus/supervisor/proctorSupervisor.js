@@ -14,8 +14,7 @@ class ProctorSupervisor extends EventEmitter {
     // Define all worker modules
     this.workerModules = [
       "process-watch-worker",
-      "device-watch-worker", // External device monitoring
-      "bt-watch-worker",
+      "device-watch-worker", // External device monitoring (includes Bluetooth via SmartDeviceDetector)
       "screen-watch-worker", // Includes recording/overlay detection
       "notification-blocker-worker",
       "vm-detect-worker",

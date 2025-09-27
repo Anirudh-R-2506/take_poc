@@ -4,10 +4,11 @@
 #include <chrono>
 #include <algorithm>
 
-FocusIdleWatcher::FocusIdleWatcher() 
-    : running_(false), counter_(0), intervalMs_(1000), isIdle_(false), 
-      hasFocus_(true), isMinimized_(false), lastActivityTime_(0), 
-      idleStartTime_(0), lastFocusChangeTime_(0), examWindowHandle_(nullptr)
+FocusIdleWatcher::FocusIdleWatcher()
+    : running_(false), counter_(0), intervalMs_(1000), isIdle_(false),
+      hasFocus_(true), isMinimized_(false), lastActivityTime_(0),
+      idleStartTime_(0), lastFocusChangeTime_(0), examWindowHandle_(nullptr),
+      realtimeMonitorRunning_(false), lastWindowSwitchTime_(0), hasWindowSwitchEvents_(false)
 #ifdef _WIN32
     , examHwnd_(nullptr)
 #elif __APPLE__
@@ -18,6 +19,7 @@ FocusIdleWatcher::FocusIdleWatcher()
 }
 
 FocusIdleWatcher::~FocusIdleWatcher() {
+    StopRealtimeWindowMonitor();
     Stop();
 }
 
@@ -53,23 +55,24 @@ void FocusIdleWatcher::Stop() {
     if (!running_.load()) {
         return; // Not running
     }
-    
+
+    StopRealtimeWindowMonitor();
     running_.store(false);
-    
+
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
-    
+
 #ifdef _WIN32
     cleanupWindows();
 #elif __APPLE__
     cleanupMacOS();
 #endif
-    
+
     if (tsfn_) {
         tsfn_.Release();
     }
-    
+
     callback_.Reset();
 }
 
@@ -104,36 +107,41 @@ void FocusIdleWatcher::WatcherLoop() {
     auto lastHeartbeat = std::chrono::steady_clock::now();
     const auto heartbeatInterval = std::chrono::seconds(5);
     
+    // Start real-time monitoring if enabled
+    if (config_.enableRealtimeWindowSwitching) {
+        StartRealtimeWindowMonitor();
+    }
+
     while (running_.load()) {
         try {
             // Check idle state
             if (config_.enableIdleDetection) {
                 CheckIdleState();
             }
-            
+
             // Check focus state
             if (config_.enableFocusDetection) {
                 CheckFocusState();
             }
-            
+
             // Check minimize state
             if (config_.enableMinimizeDetection) {
                 CheckMinimizeState();
             }
-            
+
             // Send periodic heartbeat
             auto now = std::chrono::steady_clock::now();
             if (now - lastHeartbeat >= heartbeatInterval) {
                 EmitHeartbeat();
                 lastHeartbeat = now;
             }
-            
+
             counter_++;
-            
+
         } catch (const std::exception& e) {
             printf("[FocusIdleWatcher] Error in watcher loop: %s\n", e.what());
         }
-        
+
         // Sleep for specified interval
         std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
     }
@@ -642,5 +650,190 @@ FocusIdleEvent FocusIdleWatcher::GetCurrentStatus() {
         status.details.reason = "user-switched-app";
     }
     
+    return status;
+}
+
+// Enhanced real-time detection methods
+void FocusIdleWatcher::StartRealtimeWindowMonitor() {
+    if (realtimeMonitorRunning_.load()) {
+        return; // Already running
+    }
+
+    if (!config_.enableRealtimeWindowSwitching) {
+        printf("[FocusIdleWatcher] Real-time window monitoring disabled by config\n");
+        return;
+    }
+
+    printf("[FocusIdleWatcher] Starting real-time window monitoring with %dms interval\n", config_.realtimePollIntervalMs);
+
+    realtimeMonitorRunning_.store(true);
+    realtimeMonitorThread_ = std::thread([this]() {
+        RealtimeMonitorLoop();
+    });
+}
+
+void FocusIdleWatcher::StopRealtimeWindowMonitor() {
+    if (!realtimeMonitorRunning_.load()) {
+        return; // Not running
+    }
+
+    realtimeMonitorRunning_.store(false);
+
+    if (realtimeMonitorThread_.joinable()) {
+        realtimeMonitorThread_.join();
+    }
+
+    printf("[FocusIdleWatcher] Real-time window monitoring stopped\n");
+}
+
+void FocusIdleWatcher::RealtimeMonitorLoop() {
+    printf("[FocusIdleWatcher] Real-time monitor loop started\n");
+
+    while (realtimeMonitorRunning_.load()) {
+        try {
+            std::string windowTitle;
+            std::string newActiveApp = GetFrontmostApplication(windowTitle);
+
+            // Detect window switches
+            if (newActiveApp != currentActiveApp_ || windowTitle != currentWindowTitle_) {
+                ProcessWindowSwitch(newActiveApp, windowTitle);
+            }
+
+            // Detect partial window switches (quick app switches)
+            if (DetectPartialWindowSwitch()) {
+                // Emit immediate violation for rapid switching behavior
+                FocusIdleEvent event("rapid-window-switching", GetCurrentTimestamp());
+                event.details.activeApp = currentActiveApp_;
+                event.details.windowTitle = currentWindowTitle_;
+                event.details.reason = "rapid-switching-detected";
+                EmitFocusIdleEvent(event);
+            }
+
+        } catch (const std::exception& e) {
+            printf("[FocusIdleWatcher] Error in real-time monitor loop: %s\n", e.what());
+        }
+
+        // High-frequency polling for real-time detection
+        std::this_thread::sleep_for(std::chrono::milliseconds(config_.realtimePollIntervalMs));
+    }
+
+    printf("[FocusIdleWatcher] Real-time monitor loop ended\n");
+}
+
+void FocusIdleWatcher::ProcessWindowSwitch(const std::string& newApp, const std::string& newTitle) {
+    int64_t currentTime = GetCurrentTimestamp();
+    std::string previousApp = currentActiveApp_;
+
+    // Update current state
+    currentActiveApp_ = newApp;
+    currentWindowTitle_ = newTitle;
+    lastWindowSwitchTime_ = currentTime;
+    hasWindowSwitchEvents_ = true;
+
+    // Check if switching away from exam app
+    @autoreleasepool {
+        NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+        NSString* currentBundleId = [currentApp bundleIdentifier];
+        std::string examAppId = std::string([currentBundleId UTF8String] ?: "unknown.app");
+
+        bool switchedAwayFromExam = (previousApp == examAppId && newApp != examAppId);
+        bool switchedToExam = (previousApp != examAppId && newApp == examAppId);
+
+        if (switchedAwayFromExam) {
+            printf("[FocusIdleWatcher] ⚠️  Window switch detected: %s -> %s\n", previousApp.c_str(), newApp.c_str());
+
+            FocusIdleEvent event("window-switch-violation", currentTime);
+            event.details.activeApp = newApp;
+            event.details.windowTitle = newTitle;
+            event.details.reason = "switched-away-from-exam";
+            EmitFocusIdleEvent(event);
+
+            EmitWindowSwitchEvent(previousApp, newApp);
+        } else if (switchedToExam) {
+            printf("[FocusIdleWatcher] ✓ Returned to exam app: %s -> %s\n", previousApp.c_str(), newApp.c_str());
+
+            FocusIdleEvent event("focus-gained", currentTime);
+            event.details.reason = "returned-to-exam";
+            EmitFocusIdleEvent(event);
+        } else if (newApp != examAppId) {
+            printf("[FocusIdleWatcher] 🔄 Window switch (non-exam): %s -> %s\n", previousApp.c_str(), newApp.c_str());
+
+            FocusIdleEvent event("window-switch-ongoing", currentTime);
+            event.details.activeApp = newApp;
+            event.details.windowTitle = newTitle;
+            event.details.reason = "continued-non-exam-usage";
+            EmitFocusIdleEvent(event);
+        }
+    }
+}
+
+bool FocusIdleWatcher::DetectPartialWindowSwitch() {
+    // Detect rapid window switching patterns (potential cheating behavior)
+    int64_t currentTime = GetCurrentTimestamp();
+    int64_t timeSinceLastSwitch = currentTime - lastWindowSwitchTime_;
+
+    // If multiple switches happen within 2 seconds, flag as suspicious
+    if (hasWindowSwitchEvents_ && timeSinceLastSwitch < 2000) {
+        static int rapidSwitchCount = 0;
+        rapidSwitchCount++;
+
+        if (rapidSwitchCount >= 3) {
+            printf("[FocusIdleWatcher] 🚨 Rapid window switching detected (%d switches in 2s)\n", rapidSwitchCount);
+            rapidSwitchCount = 0; // Reset counter
+            return true;
+        }
+    } else {
+        // Reset counter if no recent activity
+        static int rapidSwitchCount = 0;
+        rapidSwitchCount = 0;
+    }
+
+    return false;
+}
+
+void FocusIdleWatcher::EmitWindowSwitchEvent(const std::string& fromApp, const std::string& toApp) {
+    int64_t currentTime = GetCurrentTimestamp();
+
+    std::ostringstream json;
+    json << "{"
+         << "\"module\": \"focus-idle-watch\","
+         << "\"eventType\": \"window-switch-detected\","
+         << "\"timestamp\": " << currentTime << ","
+         << "\"details\": {"
+         << "\"fromApp\": \"" << EscapeJson(fromApp) << "\","
+         << "\"toApp\": \"" << EscapeJson(toApp) << "\","
+         << "\"reason\": \"real-time-detection\""
+         << "},"
+         << "\"ts\": " << currentTime << ","
+         << "\"count\": " << counter_.load() << ","
+         << "\"source\": \"realtime-native\""
+         << "}";
+
+    std::string jsonStr = json.str();
+
+    if (tsfn_) {
+        tsfn_.NonBlockingCall([jsonStr](Napi::Env env, Napi::Function callback) {
+            callback.Call({Napi::String::New(env, jsonStr)});
+        });
+    }
+}
+
+FocusIdleEvent FocusIdleWatcher::GetRealtimeFocusStatus() {
+    FocusIdleEvent status;
+    status.timestamp = GetCurrentTimestamp();
+
+    // Get real-time focus status with enhanced detection
+    bool currentFocus = IsExamWindowFocused();
+
+    if (currentFocus) {
+        status.eventType = "realtime-focused";
+        status.details.reason = "exam-app-focused";
+    } else {
+        status.eventType = "realtime-focus-lost";
+        status.details.activeApp = currentActiveApp_;
+        status.details.windowTitle = currentWindowTitle_;
+        status.details.reason = "real-time-violation";
+    }
+
     return status;
 }

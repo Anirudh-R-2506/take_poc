@@ -383,9 +383,23 @@ std::string FocusIdleWatcher::GetForegroundWindowInfo(HWND& outHwnd, std::string
 }
 
 bool FocusIdleWatcher::IsExamWindowFocused() {
-    if (!examHwnd_) return true; // Default to focused if no handle set
-
     HWND foregroundWindow = GetForegroundWindow();
+
+    // If no specific exam window handle is set, check for Electron/Morpheus app
+    if (!examHwnd_) {
+        if (!foregroundWindow) return false;
+
+        std::string windowTitle = GetWindowTitleSafe(foregroundWindow);
+        std::string processName = GetProcessNameFromWindow(foregroundWindow);
+
+        // Check if it's our Electron app
+        bool isMorpheusApp = (processName.find("Electron") != std::string::npos ||
+                              processName.find("morpheus") != std::string::npos ||
+                              windowTitle.find("Morpheus") != std::string::npos ||
+                              windowTitle.find("Proctoring") != std::string::npos);
+
+        return isMorpheusApp;
+    }
 
     // Check if the foreground window is our exam window or a child of it
     HWND currentWindow = foregroundWindow;

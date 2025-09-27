@@ -766,3 +766,31 @@ ClipboardEvent ClipboardWatcher::GetCurrentSnapshot() {
     
     return snapshot;
 }
+
+bool ClipboardWatcher::ClearClipboard() {
+#ifdef __APPLE__
+    @autoreleasepool {
+        NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+        if (pasteboard) {
+            // Clear all data from the pasteboard
+            [pasteboard clearContents];
+
+            // Verify the clipboard was cleared
+            NSArray* types = [pasteboard types];
+            if (types == nil || [types count] == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+#elif _WIN32
+    if (OpenClipboard(NULL)) {
+        EmptyClipboard();
+        CloseClipboard();
+        return true;
+    }
+    return false;
+#else
+    return false; // Unsupported platform
+#endif
+}

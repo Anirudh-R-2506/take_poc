@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -10,6 +10,54 @@ const PermissionManager = require(path.join(__dirname, '../../morpheus/permissio
 if (started) {
   app.quit();
 }
+
+// Function to check if running as administrator on Windows
+const isAdmin = () => {
+  if (process.platform !== 'win32') {
+    return true; // Not Windows, assume OK
+  }
+
+  try {
+    const { execSync } = require('child_process');
+    execSync('net session', { stdio: 'ignore' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+// Function to request administrator privileges
+const requestAdminPrivileges = async () => {
+  if (process.platform !== 'win32') {
+    return true; // Not Windows, no admin needed
+  }
+
+  if (isAdmin()) {
+    console.log('[Main] Already running as administrator');
+    return true;
+  }
+
+  console.log('[Main] Not running as administrator, requesting elevation...');
+
+  const result = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Administrator Privileges Required',
+    message: 'Morpheus Proctoring System requires administrator privileges to function properly.',
+    detail: 'The application needs elevated privileges to monitor system processes, manage notifications, and ensure exam integrity. Please restart the application as an administrator.',
+    buttons: ['Exit', 'Continue Anyway'],
+    defaultId: 0,
+    cancelId: 0
+  });
+
+  if (result.response === 0) {
+    console.log('[Main] User chose to exit - admin privileges required');
+    app.quit();
+    return false;
+  } else {
+    console.log('[Main] User chose to continue without admin privileges - functionality may be limited');
+    return true;
+  }
+};
 
 // Global variables
 let mainWindow = null;
@@ -43,6 +91,9 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 1000,
+    fullscreen: true, // Launch in fullscreen/presentation mode
+    kiosk: true, // Enable kiosk mode to prevent exiting fullscreen
+    alwaysOnTop: true, // Keep window on top for proctoring
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -246,6 +297,13 @@ const setupIPC = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Check for administrator privileges on Windows
+  const hasAdminPrivileges = await requestAdminPrivileges();
+
+  if (!hasAdminPrivileges) {
+    return; // App will quit if user chose to exit
+  }
+
   createWindow();
   setupIPC();
 

@@ -8,6 +8,8 @@
 #include <atomic>
 #include <functional>
 #include <set>
+#include <map>
+#include <chrono>
 #include "CommonTypes.h"
 
 #ifdef _WIN32
@@ -24,31 +26,77 @@
 #include <setupapi.h>
 #include <devguid.h>
 #include <cfgmgr32.h>
+#include <dxgi.h>
+#include <d3d11.h>
+#include <winuser.h>
+#include <psapi.h>
 #pragma comment(lib, "setupapi.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d3d11.lib")
 #elif __APPLE__
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/hid/IOHIDLib.h>
 #include <ApplicationServices/ApplicationServices.h>
+#include <CoreFoundation/CoreFoundation.h>
+// Forward declarations for Objective-C types
+#ifdef __OBJC__
+@class AVCaptureDevice;
+@class SCShareableContent;
+#endif
 #endif
 
+// Enhanced screen sharing detection for 2025
+enum class ScreenSharingMethod {
+    NONE = 0,
+    BROWSER_WEBRTC = 1,
+    DESKTOP_DUPLICATION = 2,
+    SCREENCAPTUREKIT = 3,
+    APPLICATION_SHARING = 4,
+    VIRTUAL_CAMERA = 5,
+    DISPLAY_MIRRORING = 6,
+    REMOTE_DESKTOP = 7
+};
+
+// Screen sharing session information
+struct ScreenSharingSession {
+    ScreenSharingMethod method;
+    std::string processName;
+    int pid;
+    std::string targetUrl;
+    std::string description;
+    double confidence;
+    bool isActive;
+};
+
+// Enhanced display information
 struct DisplayInfo {
     std::string name;
+    std::string deviceId;
     bool isPrimary;
     bool isExternal;
     bool isMirrored;
+    bool isBeingCaptured;
+    bool hasActiveSessions;
     int width;
     int height;
+    int refreshRate;
+    std::vector<ScreenSharingSession> activeSessions;
 };
 
+// Comprehensive screen status for 2025
 struct ScreenStatus {
     bool mirroring;
     bool splitScreen;
+    bool screenSharing;
+    bool hasActiveCaptureSession;
     std::vector<DisplayInfo> displays;
     std::vector<DisplayInfo> externalDisplays;
     std::vector<InputDeviceInfo> externalKeyboards;
     std::vector<InputDeviceInfo> externalDevices;
+    std::vector<ScreenSharingSession> activeSharingSessions;
     RecordingDetectionResult recordingResult;
+    double overallThreatLevel;
 };
 
 class ScreenWatcher {
@@ -65,6 +113,20 @@ public:
     std::vector<OverlayWindow> getOverlayWindows();
     bool isPlatformSupported();
 
+    // Enhanced 2025 screen sharing detection methods
+    std::vector<ScreenSharingSession> detectScreenSharingSessions();
+    std::vector<ScreenSharingSession> detectBrowserScreenSharing();
+    std::vector<ScreenSharingSession> detectDesktopDuplication();
+    std::vector<ScreenSharingSession> detectScreenCaptureKit();
+    bool isScreenBeingCaptured();
+    double calculateScreenSharingThreatLevel();
+
+    // Advanced overlay and mirroring detection
+    bool detectAdvancedScreenMirroring();
+    std::vector<DisplayInfo> getEnhancedDisplayInfo();
+    bool detectSplitScreenConfiguration();
+    std::vector<ScreenSharingSession> detectApplicationSharing();
+
 private:
     std::atomic<bool> isRunning;
     std::thread watcherThread;
@@ -77,6 +139,13 @@ private:
     double overlayConfidenceThreshold_;
     int checkCount_;
 
+    // Enhanced 2025 detection state
+    std::vector<ScreenSharingSession> lastSharingSessions_;
+    bool lastScreenSharingState_;
+    double screenSharingConfidenceThreshold_;
+    std::chrono::steady_clock::time_point lastDetectionTime_;
+    std::map<int, ScreenSharingMethod> processMethodCache_;
+
     ScreenStatus detectScreenStatus();
 
 #ifdef _WIN32
@@ -84,11 +153,25 @@ private:
     std::vector<InputDeviceInfo> getWindowsInputDevices();
     bool isWindowsMirroring();
     bool isWindowsSplitScreen();
+
+    // Windows 2025 screen sharing detection
+    std::vector<ScreenSharingSession> detectWindowsDesktopDuplication();
+    std::vector<ScreenSharingSession> detectWindowsGraphicsCapture();
+    bool isDesktopDuplicationActive();
+    std::vector<ScreenSharingSession> scanWindowsBrowserScreenSharing();
+
 #elif __APPLE__
     std::vector<DisplayInfo> getMacOSDisplays();
     std::vector<InputDeviceInfo> getMacOSInputDevices();
     bool isMacOSMirroring();
     bool isMacOSSplitScreen();
+
+    // macOS 2025 screen sharing detection
+    std::vector<ScreenSharingSession> detectMacOSScreenCaptureKit();
+    std::vector<ScreenSharingSession> detectMacOSCoreGraphicsCapture();
+    bool isScreenCaptureKitActive();
+    std::vector<ScreenSharingSession> scanMacOSBrowserScreenSharing();
+
 #endif
 
     std::vector<ProcessInfo> detectRecordingProcesses();
@@ -97,6 +180,19 @@ private:
     double calculateOverlayConfidence(const std::vector<OverlayWindow>& overlayWindows);
     void initializeRecordingBlacklist();
     std::vector<ProcessInfo> getRunningProcesses();
+
+    // Enhanced 2025 analysis methods
+    double calculateScreenSharingConfidence(const std::vector<ScreenSharingSession>& sessions);
+    ScreenSharingMethod identifyScreenSharingMethod(const ProcessInfo& process);
+    bool isProcessScreenSharing(const ProcessInfo& process);
+    std::vector<ScreenSharingSession> analyzeProcessForScreenSharing(const ProcessInfo& process);
+
+    // Browser-specific screen sharing detection
+    std::vector<ScreenSharingSession> detectChromeScreenSharing();
+    std::vector<ScreenSharingSession> detectFirefoxScreenSharing();
+    std::vector<ScreenSharingSession> detectSafariScreenSharing();
+    std::vector<ScreenSharingSession> detectEdgeScreenSharing();
+    bool isBrowserProcessScreenSharing(const ProcessInfo& process);
 
 #ifdef _WIN32
     std::vector<std::string> getProcessModules(DWORD processID);

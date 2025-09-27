@@ -10,6 +10,8 @@
         "random": "cpp",
         "format": "cpp",
         "type_traits": "cpp",
-        "iomanip": "cpp"
+        "iomanip": "cpp",
+        "sstream": "cpp",
+        "algorithm": "cpp"
     }
 }

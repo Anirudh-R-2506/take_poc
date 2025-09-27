@@ -12,9 +12,7 @@ class ProctorService {
         if (typeof window !== 'undefined' && window.proctorAPI) {
             this.setupEventListeners();
             this.isConnected = true;
-            console.log('[ProctorService] Connected to ProctorAPI');
         } else {
-            console.warn('[ProctorService] ProctorAPI not available');
         }
     }
     
@@ -33,7 +31,6 @@ class ProctorService {
     handleProctorEvent(data) {
         const { module, payload, timestamp } = data;
         
-        console.log('[ProctorService] Received event for module:', module, 'with payload keys:', payload ? Object.keys(payload) : 'none');
         
         // Update module data
         this.moduleData.set(module, {
@@ -46,7 +43,6 @@ class ProctorService {
             try {
                 listener(module, payload, timestamp);
             } catch (error) {
-                console.error('[ProctorService] Error in event listener:', error);
             }
         });
     }
@@ -56,7 +52,6 @@ class ProctorService {
             try {
                 listener(status);
             } catch (error) {
-                console.error('[ProctorService] Error in status listener:', error);
             }
         });
     }
@@ -101,7 +96,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.getWorkerStatus();
         } catch (error) {
-            console.error('[ProctorService] Error getting worker status:', error);
             return null;
         }
     }
@@ -114,7 +108,6 @@ class ProctorService {
             await window.proctorAPI.restartWorker(moduleName);
             return true;
         } catch (error) {
-            console.error('[ProctorService] Error restarting worker:', error);
             return false;
         }
     }
@@ -127,7 +120,6 @@ class ProctorService {
             // Send command to start all workers
             return window.proctorAPI.sendCommand({ cmd: 'start-all-workers' });
         } catch (error) {
-            console.error('[ProctorService] Error starting all workers:', error);
             return false;
         }
     }
@@ -139,7 +131,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.getSystemInfo();
         } catch (error) {
-            console.error('[ProctorService] Error getting system info:', error);
             return null;
         }
     }
@@ -151,7 +142,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.checkPermissions();
         } catch (error) {
-            console.error('[ProctorService] Error checking permissions:', error);
             return null;
         }
     }
@@ -162,7 +152,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.requestPermissions();
         } catch (error) {
-            console.error('[ProctorService] Error requesting permissions:', error);
             return null;
         }
     }
@@ -173,7 +162,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.requestSpecificPermission(permissionType);
         } catch (error) {
-            console.error(`[ProctorService] Error requesting ${permissionType} permission:`, error);
             return false;
         }
     }
@@ -184,7 +172,6 @@ class ProctorService {
         try {
             return await window.proctorAPI.checkSpecificPermission(permissionType);
         } catch (error) {
-            console.error(`[ProctorService] Error checking ${permissionType} permission:`, error);
             return false;
         }
     }
@@ -208,7 +195,6 @@ class ProctorService {
         const moduleInfo = {
             'process-watch': { name: 'Process Monitor', icon: '🔍', color: '#e74c3c' },
             'device-watch': { name: 'Device Monitor', icon: '💾', color: '#1abc9c' },
-            'bt-watch': { name: 'Bluetooth', icon: '📶', color: '#9b59b6' },
             'screen-watch': { name: 'Screen Monitor', icon: '🖥️', color: '#f39c12' },
             'notification-blocker': { name: 'Notification Blocker', icon: '🔕', color: '#e67e22' },
             'vm-detect': { name: 'VM Detection', icon: '🖴', color: '#34495e' },

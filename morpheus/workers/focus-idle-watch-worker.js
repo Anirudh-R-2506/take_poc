@@ -15,43 +15,115 @@ class FocusIdleWatchWorker extends WorkerBase {
     }
     
     startPollingMode() {
-        console.log(`[${this.moduleName}] Using native API polling mode`);
-        
-        // Check if the native method exists
-        if (!this.nativeAddon || typeof this.nativeAddon.getCurrentFocusIdleStatus !== 'function') {
+        console.log(`[${this.moduleName}] Using enhanced dual-detection mode (native + real-time)`);
+
+        // Check if native methods exist
+        const hasBasicFocus = this.nativeAddon && typeof this.nativeAddon.getCurrentFocusIdleStatus === 'function';
+        const hasRealtimeFocus = this.nativeAddon && typeof this.nativeAddon.getRealtimeFocusStatus === 'function';
+        const hasRealtimeMonitor = this.nativeAddon && typeof this.nativeAddon.startRealtimeWindowMonitor === 'function';
+
+        if (!hasBasicFocus) {
             console.error(`[${this.moduleName}] getCurrentFocusIdleStatus method not available, falling back`);
             this.startFallbackMode();
             return;
         }
-        
-        console.log(`[${this.moduleName}] Starting focus/idle polling with 1s interval`);
-        
-        // Poll focus/idle status every 1 second using direct API calls
+
+        console.log(`[${this.moduleName}] Dual detection capabilities - Basic: ${hasBasicFocus}, Realtime: ${hasRealtimeFocus}, Monitor: ${hasRealtimeMonitor}`);
+
+        // Start real-time window monitoring if available
+        if (hasRealtimeMonitor) {
+            try {
+                console.log(`[${this.moduleName}] Starting real-time window monitoring...`);
+                this.nativeAddon.startRealtimeWindowMonitor();
+                console.log(`[${this.moduleName}] ✓ Real-time window monitoring started`);
+            } catch (err) {
+                console.error(`[${this.moduleName}] Failed to start real-time monitoring:`, err);
+            }
+        }
+
+        console.log(`[${this.moduleName}] Starting enhanced focus/idle polling with 500ms interval`);
+
+        // Enhanced polling with dual detection
         this.focusIdlePollingInterval = setInterval(() => {
             if (!this.isRunning) return;
-            
+
             try {
-                console.log(`[${this.moduleName}] Attempting to get focus/idle status...`);
-                const focusIdleStatus = this.nativeAddon.getCurrentFocusIdleStatus();
-                console.log(`[${this.moduleName}] Focus/idle result:`, focusIdleStatus ? `event: ${focusIdleStatus.eventType}` : 'no data');
-                
-                if (focusIdleStatus) {
-                    // Always send data to keep UI updated with current status
+                // Primary detection: Standard focus/idle status
+                const basicStatus = this.nativeAddon.getCurrentFocusIdleStatus();
+
+                // Secondary detection: Real-time focus status if available
+                let realtimeStatus = null;
+                if (hasRealtimeFocus) {
+                    try {
+                        realtimeStatus = this.nativeAddon.getRealtimeFocusStatus();
+                    } catch (err) {
+                        console.log(`[${this.moduleName}] Real-time focus detection unavailable:`, err.message);
+                    }
+                }
+
+                // Process and combine detection results
+                const combinedStatus = this.processDualDetection(basicStatus, realtimeStatus);
+
+                if (combinedStatus) {
                     this.sendToParent({
                         type: 'proctor-event',
                         module: this.moduleName,
-                        payload: focusIdleStatus
+                        payload: combinedStatus
                     });
-                    console.log(`[${this.moduleName}] Sent focus/idle data to parent: ${focusIdleStatus.eventType}`);
-                } else {
-                    console.log(`[${this.moduleName}] No focus/idle data returned`);
+
+                    // Log violations for debugging
+                    if (combinedStatus.eventType === 'focus-lost' ||
+                        combinedStatus.eventType === 'window-switch-violation' ||
+                        combinedStatus.eventType === 'rapid-window-switching') {
+                        console.log(`[${this.moduleName}] 🚨 VIOLATION DETECTED: ${combinedStatus.eventType} - App: ${combinedStatus.details?.activeApp || 'Unknown'}`);
+                    }
                 }
+
             } catch (err) {
-                console.error(`[${this.moduleName}] Error getting focus/idle status:`, err);
-                // Fall back to JavaScript implementation
+                console.error(`[${this.moduleName}] Error in enhanced focus detection:`, err);
                 this.startFallbackMode();
             }
-        }, 1000); // 1 second interval
+        }, 500); // Faster polling for better detection
+    }
+
+    processDualDetection(basicStatus, realtimeStatus) {
+        // Prioritize real-time violations over basic status
+        if (realtimeStatus && (
+            realtimeStatus.eventType === 'realtime-focus-lost' ||
+            realtimeStatus.eventType === 'window-switch-violation' ||
+            realtimeStatus.eventType === 'rapid-window-switching'
+        )) {
+            console.log(`[${this.moduleName}] Real-time violation detected: ${realtimeStatus.eventType}`);
+            return {
+                ...realtimeStatus,
+                detection_mode: 'dual',
+                primary_source: 'realtime-native',
+                backup_source: 'native'
+            };
+        }
+
+        // Use basic status as primary source
+        if (basicStatus) {
+            const enhanced = {
+                ...basicStatus,
+                detection_mode: 'dual',
+                primary_source: 'native'
+            };
+
+            // Add real-time context if available
+            if (realtimeStatus && realtimeStatus.details) {
+                enhanced.realtime_context = {
+                    activeApp: realtimeStatus.details.activeApp,
+                    windowTitle: realtimeStatus.details.windowTitle,
+                    reason: realtimeStatus.details.reason
+                };
+                enhanced.backup_source = 'realtime-native';
+            }
+
+            return enhanced;
+        }
+
+        return null;
     }
     
     startFallbackMode() {
@@ -66,7 +138,18 @@ class FocusIdleWatchWorker extends WorkerBase {
             clearInterval(this.focusIdlePollingInterval);
             this.focusIdlePollingInterval = null;
         }
-        
+
+        // Stop real-time window monitoring if available
+        if (this.nativeAddon && typeof this.nativeAddon.stopRealtimeWindowMonitor === 'function') {
+            try {
+                console.log(`[${this.moduleName}] Stopping real-time window monitoring...`);
+                this.nativeAddon.stopRealtimeWindowMonitor();
+                console.log(`[${this.moduleName}] ✓ Real-time window monitoring stopped`);
+            } catch (err) {
+                console.error(`[${this.moduleName}] Error stopping real-time monitoring:`, err);
+            }
+        }
+
         if (this.isUsingFocusIdleWatcher && this.nativeAddon) {
             try {
                 this.nativeAddon.stopFocusIdleWatcher();
@@ -75,7 +158,7 @@ class FocusIdleWatchWorker extends WorkerBase {
                 console.error(`[${this.moduleName}] Error stopping focus/idle watcher:`, err);
             }
         }
-        
+
         super.stop();
     }
     

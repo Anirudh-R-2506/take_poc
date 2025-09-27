@@ -16,45 +16,52 @@ class ProcessWatchWorker extends WorkerBase {
     }
     
     startPollingMode() {
-        console.log(`[${this.moduleName}] Using native API polling mode`);
-        
-        // Check if the native method exists
-        if (!this.nativeAddon || typeof this.nativeAddon.getProcessSnapshot !== 'function') {
-            console.error(`[${this.moduleName}] getProcessSnapshot method not available, falling back`);
+        console.log(`[${this.moduleName}] Using enhanced detection mode`);
+
+        // Check if enhanced methods are available
+        const hasEnhanced = this.nativeAddon &&
+                           typeof this.nativeAddon.getProcessSnapshot === 'function' &&
+                           typeof this.nativeAddon.detectSuspiciousBehavior === 'function';
+
+        if (!hasEnhanced && (!this.nativeAddon || typeof this.nativeAddon.getProcessSnapshot !== 'function')) {
+            console.error(`[${this.moduleName}] Process detection methods not available, falling back`);
             this.startFallbackMode();
             return;
         }
-        
-        console.log(`[${this.moduleName}] Starting process polling with 1.5s interval`);
-        
-        // Poll process snapshot every 1.5 seconds using direct API calls
+
+        console.log(`[${this.moduleName}] Starting enhanced process detection with 1.5s interval`);
+
         this.processPollingInterval = setInterval(() => {
             if (!this.isRunning) return;
-            
+
             try {
-                console.log(`[${this.moduleName}] Attempting to get process snapshot...`);
-                const snapshot = this.nativeAddon.getProcessSnapshot();
-                console.log(`[${this.moduleName}] Process snapshot result:`, snapshot ? 'received data' : 'no data');
-                
-                if (snapshot) {
-                    // Process the snapshot to extract blacklisted processes
-                    const processedData = this.processSnapshot(snapshot);
-                    
-                    this.sendToParent({
-                        type: 'proctor-event',
-                        module: this.moduleName,
-                        payload: processedData
-                    });
-                    console.log(`[${this.moduleName}] Sent process data to parent: ${processedData.blacklisted_found ? 'blacklisted found' : 'no blacklisted'}`);
+                let processedData;
+
+                if (hasEnhanced) {
+                    // Use enhanced detection with threat scoring
+                    const suspiciousBehavior = this.nativeAddon.detectSuspiciousBehavior();
+                    const enhancedSnapshot = this.nativeAddon.getProcessSnapshot();
+
+                    processedData = this.processEnhancedSnapshot(suspiciousBehavior, enhancedSnapshot);
+                    console.log(`[${this.moduleName}] Enhanced detection: ${suspiciousBehavior.length} suspicious processes found`);
                 } else {
-                    console.log(`[${this.moduleName}] No process data returned`);
+                    // Fallback to basic detection
+                    const snapshot = this.nativeAddon.getProcessSnapshot();
+                    processedData = this.processSnapshot(snapshot);
+                    console.log(`[${this.moduleName}] Basic detection: ${processedData.blacklisted_found ? 'blacklisted found' : 'no blacklisted'}`);
                 }
+
+                this.sendToParent({
+                    type: 'proctor-event',
+                    module: this.moduleName,
+                    payload: processedData
+                });
+
             } catch (err) {
-                console.error(`[${this.moduleName}] Error getting process snapshot:`, err);
-                // Fall back to JavaScript implementation
+                console.error(`[${this.moduleName}] Error in process detection:`, err);
                 this.startFallbackMode();
             }
-        }, 1500); // 1.5 second interval
+        }, 1500);
     }
     
     startFallbackMode() {
@@ -64,8 +71,68 @@ class ProcessWatchWorker extends WorkerBase {
         super.startFallbackMode();
     }
     
+    processEnhancedSnapshot(suspiciousBehavior, enhancedSnapshot) {
+        const threatLevels = {
+            0: 'NONE',
+            1: 'LOW',
+            2: 'MEDIUM',
+            3: 'HIGH',
+            4: 'CRITICAL'
+        };
+
+        const categories = {
+            0: 'SAFE',
+            1: 'AI_TOOL',
+            2: 'BROWSER',
+            3: 'SCREEN_SHARING',
+            4: 'REMOTE_ACCESS',
+            5: 'VPN_TOOL',
+            6: 'DEVELOPMENT',
+            7: 'VIRTUAL_MACHINE',
+            8: 'RECORDING',
+            9: 'COMMUNICATION',
+            10: 'OVERLAY_TOOL'
+        };
+
+        const violations = [];
+        let maxThreatLevel = 0;
+
+        // Process suspicious behavior (highest priority threats)
+        if (suspiciousBehavior && Array.isArray(suspiciousBehavior)) {
+            for (const process of suspiciousBehavior) {
+                violations.push({
+                    pid: process.pid,
+                    name: process.name,
+                    path: process.path,
+                    threatLevel: threatLevels[process.threatLevel] || 'UNKNOWN',
+                    category: categories[process.category] || 'UNKNOWN',
+                    confidence: process.confidence,
+                    riskReason: process.riskReason,
+                    violation_type: 'SUSPICIOUS_BEHAVIOR'
+                });
+                maxThreatLevel = Math.max(maxThreatLevel, process.threatLevel);
+            }
+        }
+
+        return {
+            blacklisted_found: violations.length > 0,
+            violations: violations,
+            matches: violations, // Backwards compatibility
+            total_processes: enhancedSnapshot ? enhancedSnapshot.length : 0,
+            max_threat_level: threatLevels[maxThreatLevel],
+            threat_count: {
+                critical: violations.filter(v => v.threatLevel === 'CRITICAL').length,
+                high: violations.filter(v => v.threatLevel === 'HIGH').length,
+                medium: violations.filter(v => v.threatLevel === 'MEDIUM').length,
+                low: violations.filter(v => v.threatLevel === 'LOW').length
+            },
+            timestamp: Date.now(),
+            source: 'enhanced_native'
+        };
+    }
+
     processSnapshot(snapshot) {
-        // Define blacklisted process patterns (more comprehensive)
+        // Legacy basic detection for fallback
         const blacklist = [
             'chrome', 'Chrome', 'Google Chrome',
             'firefox', 'Firefox', 'Mozilla Firefox',
@@ -75,36 +142,36 @@ class ProcessWatchWorker extends WorkerBase {
             'brave', 'Brave',
             'tor', 'Tor'
         ];
-        
+
         const matches = [];
-        
-        // Check each process against blacklist patterns
+
         if (snapshot && Array.isArray(snapshot)) {
             for (const process of snapshot) {
                 const processName = process.name || '';
                 const processPath = process.path || '';
-                
-                // Check if process name or path contains blacklisted terms
+
                 for (const blacklistTerm of blacklist) {
                     if (processName.toLowerCase().includes(blacklistTerm.toLowerCase()) ||
                         processPath.toLowerCase().includes(blacklistTerm.toLowerCase())) {
                         matches.push({
                             pid: process.pid,
                             name: processName,
-                            path: processPath
+                            path: processPath,
+                            violation_type: 'BASIC_BLACKLIST'
                         });
-                        break; // Don't add same process multiple times
+                        break;
                     }
                 }
             }
         }
-        
+
         return {
             blacklisted_found: matches.length > 0,
             matches: matches,
+            violations: matches,
             total_processes: snapshot ? snapshot.length : 0,
             timestamp: Date.now(),
-            source: 'native'
+            source: 'basic_native'
         };
     }
     

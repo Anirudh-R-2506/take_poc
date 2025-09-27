@@ -25,7 +25,8 @@
 #endif
 
 ScreenWatcher::ScreenWatcher() : isRunning(false), checkIntervalMs(3000),
-                                 lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6), checkCount_(0) {
+                                 lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6),
+                                 checkCount_(0), lastScreenSharingState_(false), screenSharingConfidenceThreshold_(0.75) {
     initializeRecordingBlacklist();
 }
 
@@ -847,4 +848,244 @@ bool ScreenWatcher::isExternalInputDevice(const std::string& deviceName, const s
 
     return true;
 }
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectWindowsDesktopDuplication() {
+    std::vector<ScreenSharingSession> sessions;
+
+    // Initialize DXGI
+    IDXGIFactory1* factory = nullptr;
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
+    if (FAILED(hr)) {
+        return sessions;
+    }
+
+    // Enumerate adapters
+    UINT adapterIdx = 0;
+    IDXGIAdapter1* adapter = nullptr;
+
+    while (factory->EnumAdapters1(adapterIdx, &adapter) != DXGI_ERROR_NOT_FOUND) {
+        UINT outputIdx = 0;
+        IDXGIOutput* output = nullptr;
+
+        while (adapter->EnumOutputs(outputIdx, &output) != DXGI_ERROR_NOT_FOUND) {
+            IDXGIOutput1* output1 = nullptr;
+            hr = output->QueryInterface(__uuidof(IDXGIOutput1), (void**)&output1);
+
+            if (SUCCEEDED(hr)) {
+                // Try to create a duplication interface
+                IDXGIOutputDuplication* duplication = nullptr;
+
+                // Create D3D11 device for duplication
+                ID3D11Device* device = nullptr;
+                D3D_FEATURE_LEVEL featureLevel;
+                hr = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, NULL, 0, nullptr, 0,
+                                     D3D11_SDK_VERSION, &device, &featureLevel, nullptr);
+
+                if (SUCCEEDED(hr)) {
+                    hr = output1->DuplicateOutput(device, &duplication);
+
+                    if (SUCCEEDED(hr)) {
+                        // Desktop duplication is available and potentially active
+                        // Check for active duplications by attempting frame acquisition
+                        DXGI_OUTDUPL_FRAME_INFO frameInfo;
+                        IDXGIResource* desktopResource = nullptr;
+
+                        // Non-blocking check for active duplication
+                        hr = duplication->AcquireNextFrame(0, &frameInfo, &desktopResource);
+
+                        if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+                            // No active duplication currently
+                        } else if (SUCCEEDED(hr)) {
+                            // Active desktop duplication detected!
+                            ScreenSharingSession session;
+                            session.method = ScreenSharingMethod::DESKTOP_DUPLICATION;
+                            session.processName = "Desktop Duplication API";
+                            session.pid = -1; // System level
+                            session.description = "Windows Desktop Duplication API active";
+                            session.confidence = 0.9;
+                            session.isActive = true;
+
+                            // Only report sessions that meet confidence threshold
+                            if (session.confidence >= screenSharingConfidenceThreshold_) {
+                                sessions.push_back(session);
+                            }
+
+                            duplication->ReleaseFrame();
+                            if (desktopResource) desktopResource->Release();
+                        }
+
+                        duplication->Release();
+                    }
+                    device->Release();
+                }
+                output1->Release();
+            }
+            output->Release();
+            outputIdx++;
+        }
+        adapter->Release();
+        adapterIdx++;
+    }
+
+    factory->Release();
+    return sessions;
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectWindowsGraphicsCapture() {
+    std::vector<ScreenSharingSession> sessions;
+
+    // Check for Windows Graphics Capture API usage
+    // This is typically used by modern screen sharing applications
+    std::vector<ProcessInfo> processes = getRunningProcesses();
+
+    for (const auto& process : processes) {
+        bool hasGraphicsCapture = false;
+
+        // Check loaded modules for Graphics Capture API
+        std::vector<std::string> modules = getProcessModules(process.pid);
+        for (const auto& module : modules) {
+            std::string lowerModule = module;
+            std::transform(lowerModule.begin(), lowerModule.end(), lowerModule.begin(), ::tolower);
+
+            if (lowerModule.find("windows.graphics.capture") != std::string::npos ||
+                lowerModule.find("winrt") != std::string::npos ||
+                lowerModule.find("screencapture") != std::string::npos) {
+                hasGraphicsCapture = true;
+                break;
+            }
+        }
+
+        if (hasGraphicsCapture) {
+            ScreenSharingSession session;
+            session.method = ScreenSharingMethod::APPLICATION_SHARING;
+            session.processName = process.name;
+            session.pid = process.pid;
+            session.description = "Windows Graphics Capture API detected";
+            session.confidence = 0.8;
+            session.isActive = true;
+
+            // Only report sessions that meet confidence threshold
+            if (session.confidence >= screenSharingConfidenceThreshold_) {
+                sessions.push_back(session);
+            }
+        }
+    }
+
+    return sessions;
+}
+
+bool ScreenWatcher::isDesktopDuplicationActive() {
+    auto sessions = detectWindowsDesktopDuplication();
+    return !sessions.empty();
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::scanWindowsBrowserScreenSharing() {
+    std::vector<ScreenSharingSession> sessions;
+    std::vector<ProcessInfo> processes = getRunningProcesses();
+
+    // Browser processes to check
+    std::vector<std::string> browserPatterns = {
+        "chrome", "firefox", "msedge", "edge", "opera", "brave", "vivaldi"
+    };
+
+    for (const auto& process : processes) {
+        std::string lowerName = process.name;
+        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+        bool isBrowser = false;
+        for (const auto& pattern : browserPatterns) {
+            if (lowerName.find(pattern) != std::string::npos) {
+                isBrowser = true;
+                break;
+            }
+        }
+
+        if (isBrowser) {
+            // Check for WebRTC screen sharing indicators
+            std::vector<std::string> modules = getProcessModules(process.pid);
+            bool hasWebRTC = false;
+
+            for (const auto& module : modules) {
+                std::string lowerModule = module;
+                std::transform(lowerModule.begin(), lowerModule.end(), lowerModule.begin(), ::tolower);
+
+                if (lowerModule.find("webrtc") != std::string::npos ||
+                    lowerModule.find("screenshare") != std::string::npos ||
+                    lowerModule.find("getdisplaymedia") != std::string::npos) {
+                    hasWebRTC = true;
+                    break;
+                }
+            }
+
+            if (hasWebRTC) {
+                ScreenSharingSession session;
+                session.method = ScreenSharingMethod::BROWSER_WEBRTC;
+                session.processName = process.name;
+                session.pid = process.pid;
+                session.description = "Browser WebRTC screen sharing detected";
+                session.confidence = 0.85;
+                session.isActive = true;
+
+                // Only report sessions that meet confidence threshold
+                if (session.confidence >= screenSharingConfidenceThreshold_) {
+                    sessions.push_back(session);
+                }
+            }
+        }
+    }
+
+    return sessions;
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectScreenSharingSessions() {
+    std::vector<ScreenSharingSession> allSessions;
+
+    // Combine all detection methods
+    auto ddSessions = detectWindowsDesktopDuplication();
+    auto gcSessions = detectWindowsGraphicsCapture();
+    auto browserSessions = scanWindowsBrowserScreenSharing();
+
+    allSessions.insert(allSessions.end(), ddSessions.begin(), ddSessions.end());
+    allSessions.insert(allSessions.end(), gcSessions.begin(), gcSessions.end());
+    allSessions.insert(allSessions.end(), browserSessions.begin(), browserSessions.end());
+
+    return allSessions;
+}
+
+bool ScreenWatcher::isScreenBeingCaptured() {
+    auto sessions = detectScreenSharingSessions();
+    return !sessions.empty();
+}
+
+double ScreenWatcher::calculateScreenSharingThreatLevel() {
+    auto sessions = detectScreenSharingSessions();
+
+    if (sessions.empty()) {
+        return 0.0;
+    }
+
+    double maxThreat = 0.0;
+    for (const auto& session : sessions) {
+        switch (session.method) {
+            case ScreenSharingMethod::DESKTOP_DUPLICATION:
+                maxThreat = std::max(maxThreat, 0.95);
+                break;
+            case ScreenSharingMethod::BROWSER_WEBRTC:
+                maxThreat = std::max(maxThreat, 0.9);
+                break;
+            case ScreenSharingMethod::APPLICATION_SHARING:
+                maxThreat = std::max(maxThreat, 0.8);
+                break;
+            case ScreenSharingMethod::REMOTE_DESKTOP:
+                maxThreat = std::max(maxThreat, 1.0);
+                break;
+            default:
+                maxThreat = std::max(maxThreat, 0.7);
+                break;
+        }
+    }
+
+    return maxThreat;
+}
+
 #endif

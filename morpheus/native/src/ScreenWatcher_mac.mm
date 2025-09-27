@@ -26,8 +26,9 @@
 #import <ApplicationServices/ApplicationServices.h>
 #endif
 
-ScreenWatcher::ScreenWatcher() : isRunning(false), checkIntervalMs(3000), 
-                                 lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6) {
+ScreenWatcher::ScreenWatcher() : isRunning(false), checkIntervalMs(3000),
+                                 lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6),
+                                 lastScreenSharingState_(false), screenSharingConfidenceThreshold_(0.75) {
     std::cout << "[ScreenWatcher] Initialized for platform: " 
               << (isPlatformSupported() ? "supported" : "unsupported") << std::endl;
     
@@ -1243,6 +1244,276 @@ std::vector<std::string> ScreenWatcher::enumerateVirtualCameras() {
     }
     
     return virtualCameras;
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectMacOSScreenCaptureKit() {
+    std::vector<ScreenSharingSession> sessions;
+
+    @autoreleasepool {
+        // Check if ScreenCaptureKit is available (macOS 12.3+)
+        if (@available(macOS 12.3, *)) {
+            // Check for active ScreenCaptureKit sessions by examining processes with screen capture capabilities
+            std::vector<ProcessInfo> processes = getRunningProcesses();
+
+            for (const auto& process : processes) {
+                bool hasScreenCaptureKit = false;
+
+                // Check loaded libraries for ScreenCaptureKit
+                std::vector<std::string> libraries = getProcessLibraries(process.pid);
+                for (const auto& lib : libraries) {
+                    std::string lowerLib = lib;
+                    std::transform(lowerLib.begin(), lowerLib.end(), lowerLib.begin(), ::tolower);
+
+                    if (lowerLib.find("screencapturekit") != std::string::npos ||
+                        lowerLib.find("scstreamconfiguration") != std::string::npos ||
+                        lowerLib.find("sccontentfilter") != std::string::npos) {
+                        hasScreenCaptureKit = true;
+                        break;
+                    }
+                }
+
+                if (hasScreenCaptureKit) {
+                    ScreenSharingSession session;
+                    session.method = ScreenSharingMethod::SCREENCAPTUREKIT;
+                    session.processName = process.name;
+                    session.pid = process.pid;
+                    session.description = "ScreenCaptureKit API usage detected";
+                    session.confidence = 0.9;
+                    session.isActive = true;
+
+                    // Only report sessions that meet confidence threshold
+                    if (session.confidence >= screenSharingConfidenceThreshold_) {
+                        sessions.push_back(session);
+                    }
+                }
+            }
+
+            // Additional check: Monitor CGS (Core Graphics Services) for screen capture
+            // This is a lower-level API that ScreenCaptureKit often uses
+            for (const auto& process : processes) {
+                std::vector<std::string> libraries = getProcessLibraries(process.pid);
+                bool hasCoreGraphicsCapture = false;
+
+                for (const auto& lib : libraries) {
+                    std::string lowerLib = lib;
+                    std::transform(lowerLib.begin(), lowerLib.end(), lowerLib.begin(), ::tolower);
+
+                    if (lowerLib.find("coregraphics") != std::string::npos &&
+                        (lowerLib.find("capture") != std::string::npos ||
+                         lowerLib.find("display") != std::string::npos)) {
+                        hasCoreGraphicsCapture = true;
+                        break;
+                    }
+                }
+
+                if (hasCoreGraphicsCapture) {
+                    // Check if this process isn't already detected via ScreenCaptureKit
+                    bool alreadyDetected = false;
+                    for (const auto& existing : sessions) {
+                        if (existing.pid == process.pid) {
+                            alreadyDetected = true;
+                            break;
+                        }
+                    }
+
+                    if (!alreadyDetected) {
+                        ScreenSharingSession session;
+                        session.method = ScreenSharingMethod::APPLICATION_SHARING;
+                        session.processName = process.name;
+                        session.pid = process.pid;
+                        session.description = "Core Graphics screen capture detected";
+                        session.confidence = 0.75;
+                        session.isActive = true;
+
+                        // Only report sessions that meet confidence threshold
+                        if (session.confidence >= screenSharingConfidenceThreshold_) {
+                            sessions.push_back(session);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return sessions;
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectMacOSCoreGraphicsCapture() {
+    std::vector<ScreenSharingSession> sessions;
+
+    @autoreleasepool {
+        // Check for processes using CGDisplayCreateImage or similar APIs
+        std::vector<ProcessInfo> processes = getRunningProcesses();
+
+        for (const auto& process : processes) {
+            std::vector<std::string> libraries = getProcessLibraries(process.pid);
+            bool hasCoreGraphics = false;
+
+            for (const auto& lib : libraries) {
+                std::string lowerLib = lib;
+                std::transform(lowerLib.begin(), lowerLib.end(), lowerLib.begin(), ::tolower);
+
+                if (lowerLib.find("coregraphics") != std::string::npos ||
+                    lowerLib.find("cgdisplay") != std::string::npos ||
+                    lowerLib.find("applicationservices") != std::string::npos) {
+                    hasCoreGraphics = true;
+                    break;
+                }
+            }
+
+            if (hasCoreGraphics) {
+                // Additional check: Look for screen sharing patterns in process name
+                std::string lowerName = process.name;
+                std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+                std::vector<std::string> screenSharePatterns = {
+                    "zoom", "teams", "meet", "webex", "skype", "facetime",
+                    "screensharing", "vnc", "teamviewer", "anydesk", "chrome",
+                    "firefox", "safari", "edge", "obs", "quicktime"
+                };
+
+                bool isLikelyScreenSharing = false;
+                for (const auto& pattern : screenSharePatterns) {
+                    if (lowerName.find(pattern) != std::string::npos) {
+                        isLikelyScreenSharing = true;
+                        break;
+                    }
+                }
+
+                if (isLikelyScreenSharing) {
+                    ScreenSharingSession session;
+                    session.method = ScreenSharingMethod::APPLICATION_SHARING;
+                    session.processName = process.name;
+                    session.pid = process.pid;
+                    session.description = "Core Graphics screen capture in suspicious process";
+                    session.confidence = 0.8;
+                    session.isActive = true;
+
+                    // Only report sessions that meet confidence threshold
+                    if (session.confidence >= screenSharingConfidenceThreshold_) {
+                        sessions.push_back(session);
+                    }
+                }
+            }
+        }
+    }
+
+    return sessions;
+}
+
+bool ScreenWatcher::isScreenCaptureKitActive() {
+    auto sessions = detectMacOSScreenCaptureKit();
+    return !sessions.empty();
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::scanMacOSBrowserScreenSharing() {
+    std::vector<ScreenSharingSession> sessions;
+    std::vector<ProcessInfo> processes = getRunningProcesses();
+
+    // Browser processes to check
+    std::vector<std::string> browserPatterns = {
+        "chrome", "firefox", "safari", "edge", "opera", "brave", "vivaldi"
+    };
+
+    for (const auto& process : processes) {
+        std::string lowerName = process.name;
+        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+        bool isBrowser = false;
+        for (const auto& pattern : browserPatterns) {
+            if (lowerName.find(pattern) != std::string::npos) {
+                isBrowser = true;
+                break;
+            }
+        }
+
+        if (isBrowser) {
+            // Check for WebRTC and screen sharing indicators in loaded libraries
+            std::vector<std::string> libraries = getProcessLibraries(process.pid);
+            bool hasWebRTC = false;
+
+            for (const auto& lib : libraries) {
+                std::string lowerLib = lib;
+                std::transform(lowerLib.begin(), lowerLib.end(), lowerLib.begin(), ::tolower);
+
+                if (lowerLib.find("webrtc") != std::string::npos ||
+                    lowerLib.find("screenshare") != std::string::npos ||
+                    lowerLib.find("getdisplaymedia") != std::string::npos ||
+                    lowerLib.find("mediacapture") != std::string::npos) {
+                    hasWebRTC = true;
+                    break;
+                }
+            }
+
+            if (hasWebRTC) {
+                ScreenSharingSession session;
+                session.method = ScreenSharingMethod::BROWSER_WEBRTC;
+                session.processName = process.name;
+                session.pid = process.pid;
+                session.description = "Browser WebRTC screen sharing detected";
+                session.confidence = 0.85;
+                session.isActive = true;
+
+                // Only report sessions that meet confidence threshold
+                if (session.confidence >= screenSharingConfidenceThreshold_) {
+                    sessions.push_back(session);
+                }
+            }
+        }
+    }
+
+    return sessions;
+}
+
+std::vector<ScreenSharingSession> ScreenWatcher::detectScreenSharingSessions() {
+    std::vector<ScreenSharingSession> allSessions;
+
+    // Combine all detection methods
+    auto sckSessions = detectMacOSScreenCaptureKit();
+    auto cgSessions = detectMacOSCoreGraphicsCapture();
+    auto browserSessions = scanMacOSBrowserScreenSharing();
+
+    allSessions.insert(allSessions.end(), sckSessions.begin(), sckSessions.end());
+    allSessions.insert(allSessions.end(), cgSessions.begin(), cgSessions.end());
+    allSessions.insert(allSessions.end(), browserSessions.begin(), browserSessions.end());
+
+    return allSessions;
+}
+
+bool ScreenWatcher::isScreenBeingCaptured() {
+    auto sessions = detectScreenSharingSessions();
+    return !sessions.empty();
+}
+
+double ScreenWatcher::calculateScreenSharingThreatLevel() {
+    auto sessions = detectScreenSharingSessions();
+
+    if (sessions.empty()) {
+        return 0.0;
+    }
+
+    double maxThreat = 0.0;
+    for (const auto& session : sessions) {
+        switch (session.method) {
+            case ScreenSharingMethod::SCREENCAPTUREKIT:
+                maxThreat = std::max(maxThreat, 0.95);
+                break;
+            case ScreenSharingMethod::BROWSER_WEBRTC:
+                maxThreat = std::max(maxThreat, 0.9);
+                break;
+            case ScreenSharingMethod::APPLICATION_SHARING:
+                maxThreat = std::max(maxThreat, 0.8);
+                break;
+            case ScreenSharingMethod::REMOTE_DESKTOP:
+                maxThreat = std::max(maxThreat, 1.0);
+                break;
+            default:
+                maxThreat = std::max(maxThreat, 0.7);
+                break;
+        }
+    }
+
+    return maxThreat;
 }
 
 #endif

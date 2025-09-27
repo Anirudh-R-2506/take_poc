@@ -151,7 +151,6 @@ const fallbackWatcher = new JSProcessWatcher();
 // Native Bluetooth implementation now available directly through addon
 
 module.exports = {
-    // Process watcher specific functions
     startProcessWatcher: (callback, options) => {
         if (nativeAddon && nativeAddon.startProcessWatcher) {
             return nativeAddon.startProcessWatcher(callback, options);
@@ -172,37 +171,78 @@ module.exports = {
         if (nativeAddon && nativeAddon.getProcessSnapshot) {
             return nativeAddon.getProcessSnapshot();
         } else {
-            return null;
+            console.warn('[ProctorNative] Process snapshot not available');
+            return [];
         }
     },
-    
-    // Device watcher specific functions
-    startDeviceWatcher: (callback, options) => {
-        if (nativeAddon && nativeAddon.startDeviceWatcher) {
-            return nativeAddon.startDeviceWatcher(callback, options);
+
+    detectSuspiciousBehavior: () => {
+        if (nativeAddon && nativeAddon.detectSuspiciousBehavior) {
+            return nativeAddon.detectSuspiciousBehavior();
         } else {
-            console.warn('[ProctorNative] Device watcher not available, no fallback implemented');
-            return false;
-        }
-    },
-    
-    stopDeviceWatcher: () => {
-        if (nativeAddon && nativeAddon.stopDeviceWatcher) {
-            return nativeAddon.stopDeviceWatcher();
-        } else {
-            return null;
-        }
-    },
-    
-    getConnectedDevices: () => {
-        if (nativeAddon && nativeAddon.getConnectedDevices) {
-            return nativeAddon.getConnectedDevices();
-        } else {
+            console.warn('[ProctorNative] Suspicious behavior detection not available');
             return [];
         }
     },
     
-    // Screen watcher specific functions
+    // SmartDeviceDetector functions (replaces deprecated DeviceWatcher)
+    startSmartDeviceDetector: (callback, intervalMs) => {
+        if (nativeAddon && nativeAddon.startSmartDeviceDetector) {
+            return nativeAddon.startSmartDeviceDetector(callback, intervalMs);
+        } else {
+            console.warn('[ProctorNative] SmartDeviceDetector not available');
+            return false;
+        }
+    },
+
+    stopSmartDeviceDetector: () => {
+        if (nativeAddon && nativeAddon.stopSmartDeviceDetector) {
+            return nativeAddon.stopSmartDeviceDetector();
+        } else {
+            return null;
+        }
+    },
+
+    scanAllInputDevices: () => {
+        if (nativeAddon && nativeAddon.scanAllInputDevices) {
+            return nativeAddon.scanAllInputDevices();
+        } else {
+            return [];
+        }
+    },
+
+    scanAllStorageDevices: () => {
+        if (nativeAddon && nativeAddon.scanAllStorageDevices) {
+            return nativeAddon.scanAllStorageDevices();
+        } else {
+            return [];
+        }
+    },
+
+    scanVideoDevices: () => {
+        if (nativeAddon && nativeAddon.scanVideoDevices) {
+            return nativeAddon.scanVideoDevices();
+        } else {
+            return [];
+        }
+    },
+
+    getDeviceViolations: () => {
+        if (nativeAddon && nativeAddon.getDeviceViolations) {
+            return nativeAddon.getDeviceViolations();
+        } else {
+            return [];
+        }
+    },
+
+    getSecurityProfile: () => {
+        if (nativeAddon && nativeAddon.getSecurityProfile) {
+            return nativeAddon.getSecurityProfile();
+        } else {
+            return null;
+        }
+    },
+    
     startScreenWatcher: (callback, options) => {
         if (nativeAddon && nativeAddon.startScreenWatcher) {
             return nativeAddon.startScreenWatcher(callback, options);
@@ -228,15 +268,45 @@ module.exports = {
             return {
                 mirroring: false,
                 splitScreen: false,
+                screenSharing: false,
+                hasActiveCaptureSession: false,
+                overallThreatLevel: 0.0,
                 displays: [],
                 externalDisplays: [],
                 externalKeyboards: [],
-                externalDevices: []
+                externalDevices: [],
+                activeSharingSessions: []
             };
         }
     },
+
+    detectScreenSharingSessions: () => {
+        if (nativeAddon && nativeAddon.detectScreenSharingSessions) {
+            return nativeAddon.detectScreenSharingSessions();
+        } else {
+            console.warn('[ProctorNative] Screen sharing session detection not available');
+            return [];
+        }
+    },
+
+    isScreenBeingCaptured: () => {
+        if (nativeAddon && nativeAddon.isScreenBeingCaptured) {
+            return nativeAddon.isScreenBeingCaptured();
+        } else {
+            console.warn('[ProctorNative] Screen capture detection not available');
+            return false;
+        }
+    },
+
+    calculateScreenSharingThreatLevel: () => {
+        if (nativeAddon && nativeAddon.calculateScreenSharingThreatLevel) {
+            return nativeAddon.calculateScreenSharingThreatLevel();
+        } else {
+            console.warn('[ProctorNative] Screen sharing threat level calculation not available');
+            return 0.0;
+        }
+    },
     
-    // Recording and overlay detection functions (moved to ScreenWatcher)
     detectRecordingAndOverlays: () => {
         if (nativeAddon && nativeAddon.detectRecordingAndOverlays) {
             return nativeAddon.detectRecordingAndOverlays();
@@ -359,35 +429,8 @@ module.exports = {
         }
     },
     
-    // Bluetooth watcher functions (native-based)
-    startBluetoothWatcher: (callback, options) => {
-        if (nativeAddon && nativeAddon.startBluetoothWatcher) {
-            return nativeAddon.startBluetoothWatcher(callback, options);
-        } else {
-            console.warn('[ProctorNative] Bluetooth watcher not available, no fallback implemented');
-            return false;
-        }
-    },
-    
-    stopBluetoothWatcher: () => {
-        if (nativeAddon && nativeAddon.stopBluetoothWatcher) {
-            return nativeAddon.stopBluetoothWatcher();
-        } else {
-            return null;
-        }
-    },
-    
-    getBluetoothStatus: () => {
-        if (nativeAddon && nativeAddon.getBluetoothStatus) {
-            return nativeAddon.getBluetoothStatus();
-        } else {
-            return JSON.stringify({
-                enabled: false,
-                devices: [],
-                error: "Native addon not available"
-            });
-        }
-    },
+    // Bluetooth detection is now integrated into SmartDeviceDetector
+    // Use scanAllInputDevices and getDeviceViolations to get Bluetooth device violations
     
     // Clipboard watcher specific functions
     startClipboardWatcher: (callback, options) => {

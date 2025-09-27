@@ -69,6 +69,7 @@ public:
     void SetPrivacyMode(PrivacyMode mode);
     PrivacyMode GetPrivacyMode() const;
     ClipboardEvent GetCurrentSnapshot();
+    bool ClearClipboard();
     bool isPlatformSupported();
 
 private:

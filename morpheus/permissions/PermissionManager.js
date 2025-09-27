@@ -64,7 +64,7 @@ class PermissionManager {
           status: "unknown",
           required: true,
           description: "Required for hardware device detection (Windows)",
-          services: ["DeviceWatcher", "ScreenWatcher", "BluetoothWatcher"],
+          services: ["SmartDeviceDetector", "ScreenWatcher"],
           checkCommand: null,
           error: null,
         },

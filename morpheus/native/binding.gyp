@@ -5,7 +5,6 @@
       "sources": [
         "src/addon.cc",
         "src/ProcessWatcher.cpp",
-        "src/DeviceWatcher.cpp",
         "src/VMDetector.cpp",
         "src/NotificationBlocker.cpp"
       ],
@@ -16,7 +15,8 @@
             "src/ScreenWatcher_mac.mm",
             "src/ClipboardWatcher_mac.mm",
             "src/FocusIdleWatcher_mac.mm",
-            "src/BluetoothWatcher_mac.mm"
+            "src/SystemDetector_mac.mm",
+            "src/SmartDeviceDetector_mac.mm"
           ]
         }],
         ["OS=='win'", {
@@ -25,7 +25,8 @@
             "src/ScreenWatcher_win.cpp",
             "src/ClipboardWatcher.cpp",
             "src/FocusIdleWatcher.cpp",
-            "src/BluetoothWatcher_win.cpp"
+            "src/SystemDetector_win.cpp",
+            "src/SmartDeviceDetector_win.cpp"
           ]
         }]
       ],

@@ -56,14 +56,18 @@ struct FocusIdleConfig {
     int idleThresholdSec;
     int pollIntervalMs;
     int focusDebounceMs;
+    int realtimePollIntervalMs;
     std::string examAppTitle;
     bool enableIdleDetection;
     bool enableFocusDetection;
     bool enableMinimizeDetection;
+    bool enableRealtimeWindowSwitching;
+    bool enableDualDetection;
 
     FocusIdleConfig() : idleThresholdSec(30), pollIntervalMs(1000), focusDebounceMs(200),
-                       enableIdleDetection(true), enableFocusDetection(true),
-                       enableMinimizeDetection(true) {}
+                       realtimePollIntervalMs(100), enableIdleDetection(true),
+                       enableFocusDetection(true), enableMinimizeDetection(true),
+                       enableRealtimeWindowSwitching(true), enableDualDetection(true) {}
 };
 
 class FocusIdleWatcher {
@@ -77,6 +81,11 @@ public:
     void SetConfig(const FocusIdleConfig& config);
     void SetExamWindowHandle(void* windowHandle);
     FocusIdleEvent GetCurrentStatus();
+
+    // Enhanced real-time detection methods
+    void StartRealtimeWindowMonitor();
+    void StopRealtimeWindowMonitor();
+    FocusIdleEvent GetRealtimeFocusStatus();
 
 private:
     std::atomic<bool> running_;
@@ -97,6 +106,14 @@ private:
     int64_t lastFocusChangeTime_;
     void* examWindowHandle_;
     std::string lastActiveApp_;
+
+    // Real-time window switching detection state
+    std::atomic<bool> realtimeMonitorRunning_;
+    std::thread realtimeMonitorThread_;
+    std::string currentActiveApp_;
+    std::string currentWindowTitle_;
+    int64_t lastWindowSwitchTime_;
+    bool hasWindowSwitchEvents_;
 
     void WatcherLoop();
     void EmitFocusIdleEvent(const FocusIdleEvent& event);
@@ -142,6 +159,12 @@ private:
     void UpdateIdleState(bool currentlyIdle);
     void UpdateFocusState(bool currentlyFocused, const std::string& activeApp, const std::string& windowTitle);
     void UpdateMinimizeState(bool currentlyMinimized);
+
+    // Real-time window monitoring methods
+    void RealtimeMonitorLoop();
+    void ProcessWindowSwitch(const std::string& newApp, const std::string& newTitle);
+    bool DetectPartialWindowSwitch();
+    void EmitWindowSwitchEvent(const std::string& fromApp, const std::string& toApp);
 };
 
 #endif // FOCUS_IDLE_WATCHER_H

@@ -7,6 +7,8 @@ class ClipboardWorker extends WorkerBase {
         this.privacyMode = 2; // 0 = METADATA_ONLY, 1 = REDACTED, 2 = FULL
         this.lastClipboardHash = null; // Track clipboard changes
         this.lastFormats = null; // Track format changes
+        this.initializationComplete = false; // Track if initial clearing is done
+        this.clipboardClearedOnInit = false; // Track if clipboard was cleared during initialization
     }
     
     startNativeMode() {
@@ -18,14 +20,17 @@ class ClipboardWorker extends WorkerBase {
     
     startPollingMode() {
         console.log(`[${this.moduleName}] Using native API polling mode`);
-        
+
         // Check if the native method exists
         if (!this.nativeAddon || typeof this.nativeAddon.getClipboardSnapshot !== 'function') {
             console.error(`[${this.moduleName}] getClipboardSnapshot method not available, falling back`);
             this.startFallbackMode();
             return;
         }
-        
+
+        // Clear clipboard on initialization
+        this.clearClipboardOnInit();
+
         console.log(`[${this.moduleName}] Starting clipboard polling with 2s interval`);
 
         // Set privacy mode to FULL to capture clipboard content
@@ -70,10 +75,17 @@ class ClipboardWorker extends WorkerBase {
                     }
 
                     if (hasChanged) {
-                        eventType = 'clipboard-changed';
+                        // Check if this is a violation (content detected after init clearing)
+                        if (this.clipboardClearedOnInit && this.initializationComplete) {
+                            eventType = 'clipboard-violation';
+                            console.log(`[${this.moduleName}] 🚨 CLIPBOARD VIOLATION: Content detected after initialization clearing!`);
+                        } else {
+                            eventType = 'clipboard-changed';
+                        }
+
                         this.lastFormats = currentFormats;
                         this.lastClipboardHash = currentHash;
-                        console.log(`[${this.moduleName}] Clipboard change detected!`);
+                        console.log(`[${this.moduleName}] Clipboard change detected: ${eventType}`);
                     }
 
                     this.sendToParent({
@@ -102,9 +114,35 @@ class ClipboardWorker extends WorkerBase {
         }, 2000); // 2 second interval
     }
     
+    clearClipboardOnInit() {
+        console.log(`[${this.moduleName}] Clearing clipboard on initialization...`);
+
+        try {
+            if (this.nativeAddon && typeof this.nativeAddon.clearClipboard === 'function') {
+                const success = this.nativeAddon.clearClipboard();
+                if (success) {
+                    console.log(`[${this.moduleName}] ✓ Clipboard cleared successfully on initialization`);
+                    this.clipboardClearedOnInit = true;
+
+                    // Set initialization complete after a short delay to allow for clearing
+                    setTimeout(() => {
+                        this.initializationComplete = true;
+                        console.log(`[${this.moduleName}] Initialization complete - now monitoring for violations`);
+                    }, 1000);
+                } else {
+                    console.error(`[${this.moduleName}] Failed to clear clipboard on initialization`);
+                }
+            } else {
+                console.error(`[${this.moduleName}] clearClipboard method not available`);
+            }
+        } catch (err) {
+            console.error(`[${this.moduleName}] Error clearing clipboard on initialization:`, err);
+        }
+    }
+
     startFallbackMode() {
         console.log(`[${this.moduleName}] Using JavaScript clipboard watcher fallback`);
-        
+
         // Use the existing fallback from worker-base with module-specific data
         super.startFallbackMode();
     }

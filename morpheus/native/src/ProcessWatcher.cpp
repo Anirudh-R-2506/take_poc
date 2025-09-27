@@ -32,7 +32,21 @@ static std::string WideStringToUtf8(const std::wstring& wstr) {
 #endif
 
 ProcessWatcher::ProcessWatcher() : running_(false), counter_(0), lastDetectionState_(false),
-                                   lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6) {
+                                   lastRecordingState_(false), recordingConfidenceThreshold_(0.75), overlayConfidenceThreshold_(0.6),
+                                   lastNetworkScan_(std::chrono::steady_clock::now()) {
+
+    // Initialize comprehensive 2025 blacklists
+    InitializeComprehensiveBlacklist2025();
+    InitializeAIToolPatterns();
+    InitializeBrowserPatterns();
+    InitializeRemoteAccessPatterns();
+    InitializeScreenSharingPatterns();
+    InitializeVPNPatterns();
+
+    // Legacy compatibility
+    InitializeRecordingBlacklist();
+
+    // Legacy blacklist for backward compatibility
     blacklist_.insert("chrome");
     blacklist_.insert("chrome.exe");
     blacklist_.insert("Google Chrome");
@@ -40,8 +54,6 @@ ProcessWatcher::ProcessWatcher() : running_(false), counter_(0), lastDetectionSt
     blacklist_.insert("Google Chrome Helper (Renderer)");
     blacklist_.insert("Chromium");
     blacklist_.insert("chromium");
-
-    InitializeRecordingBlacklist();
 }
 
 ProcessWatcher::~ProcessWatcher() {
@@ -108,9 +120,6 @@ bool ProcessWatcher::IsRunning() const {
     return running_.load();
 }
 
-std::vector<ProcessInfo> ProcessWatcher::GetProcessSnapshot() {
-    return GetRunningProcesses();
-}
 
 void ProcessWatcher::WatcherLoop() {
     while (running_.load()) {
@@ -312,6 +321,296 @@ void ProcessWatcher::InitializeRecordingBlacklist() {
     recordingBlacklist_.insert("CloudApp");
     recordingBlacklist_.insert("Loom");
     recordingBlacklist_.insert("Screencastify");
+}
+
+// COMPREHENSIVE 2025 BLACKLIST INITIALIZATION METHODS
+
+void ProcessWatcher::InitializeComprehensiveBlacklist2025() {
+    // Initialize comprehensive threat database with categories and levels
+
+    // AI Tools - CRITICAL THREAT LEVEL
+    comprehensiveBlacklist_["ChatGPT"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["claude"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["gemini"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["copilot"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["perplexity"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["grok"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["monica"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["sider"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["harpa"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["jasper"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["writesonic"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["copy.ai"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["grammarly"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["quillbot"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["notion-ai"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["github-copilot"] = ProcessCategory::AI_TOOL;
+    comprehensiveBlacklist_["codeium"] = ProcessCategory::AI_TOOL;
+
+    // Set threat levels for AI tools
+    threatDatabase_["ChatGPT"] = ThreatLevel::CRITICAL;
+    threatDatabase_["claude"] = ThreatLevel::CRITICAL;
+    threatDatabase_["gemini"] = ThreatLevel::CRITICAL;
+    threatDatabase_["copilot"] = ThreatLevel::CRITICAL;
+    threatDatabase_["perplexity"] = ThreatLevel::CRITICAL;
+    threatDatabase_["grok"] = ThreatLevel::CRITICAL;
+    threatDatabase_["monica"] = ThreatLevel::HIGH;
+    threatDatabase_["sider"] = ThreatLevel::HIGH;
+    threatDatabase_["harpa"] = ThreatLevel::HIGH;
+    threatDatabase_["jasper"] = ThreatLevel::HIGH;
+    threatDatabase_["writesonic"] = ThreatLevel::HIGH;
+    threatDatabase_["copy.ai"] = ThreatLevel::HIGH;
+    threatDatabase_["grammarly"] = ThreatLevel::MEDIUM;
+    threatDatabase_["quillbot"] = ThreatLevel::HIGH;
+    threatDatabase_["notion-ai"] = ThreatLevel::HIGH;
+    threatDatabase_["github-copilot"] = ThreatLevel::CRITICAL;
+    threatDatabase_["codeium"] = ThreatLevel::HIGH;
+}
+
+void ProcessWatcher::InitializeAIToolPatterns() {
+    // AI Assistant patterns
+    aiToolPatterns_.insert("chatgpt");
+    aiToolPatterns_.insert("openai");
+    aiToolPatterns_.insert("claude");
+    aiToolPatterns_.insert("anthropic");
+    aiToolPatterns_.insert("gemini");
+    aiToolPatterns_.insert("bard");
+    aiToolPatterns_.insert("copilot");
+    aiToolPatterns_.insert("github copilot");
+    aiToolPatterns_.insert("perplexity");
+    aiToolPatterns_.insert("grok");
+    aiToolPatterns_.insert("monica");
+    aiToolPatterns_.insert("sider");
+    aiToolPatterns_.insert("harpa");
+    aiToolPatterns_.insert("jasper");
+    aiToolPatterns_.insert("writesonic");
+    aiToolPatterns_.insert("copy.ai");
+    aiToolPatterns_.insert("copyai");
+    aiToolPatterns_.insert("grammarly");
+    aiToolPatterns_.insert("quillbot");
+    aiToolPatterns_.insert("notion ai");
+    aiToolPatterns_.insert("codeium");
+    aiToolPatterns_.insert("tabnine");
+    aiToolPatterns_.insert("cursor");
+    aiToolPatterns_.insert("replit");
+    aiToolPatterns_.insert("codewhisperer");
+
+    // AI Browser Extensions
+    aiToolPatterns_.insert("chatgpt-extension");
+    aiToolPatterns_.insert("claude-extension");
+    aiToolPatterns_.insert("gemini-extension");
+    aiToolPatterns_.insert("copilot-extension");
+    aiToolPatterns_.insert("monica-extension");
+    aiToolPatterns_.insert("sider-extension");
+    aiToolPatterns_.insert("harpa-ai");
+    aiToolPatterns_.insert("merlin");
+    aiToolPatterns_.insert("wiseone");
+    aiToolPatterns_.insert("compose-ai");
+    aiToolPatterns_.insert("wordtune");
+}
+
+void ProcessWatcher::InitializeBrowserPatterns() {
+    // Primary Browsers - HIGH THREAT
+    comprehensiveBlacklist_["chrome"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["firefox"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["safari"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["edge"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["opera"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["brave"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["arc"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["vivaldi"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["tor"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["waterfox"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["librewolf"] = ProcessCategory::BROWSER;
+
+    // Developer/Alternative Browsers
+    comprehensiveBlacklist_["chromium"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["chrome-dev"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["chrome-canary"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["firefox-dev"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["firefox-nightly"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["safari-technology-preview"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["edge-dev"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["edge-beta"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["opera-gx"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["opera-developer"] = ProcessCategory::BROWSER;
+    comprehensiveBlacklist_["brave-nightly"] = ProcessCategory::BROWSER;
+
+    // Set threat levels for browsers
+    threatDatabase_["chrome"] = ThreatLevel::HIGH;
+    threatDatabase_["firefox"] = ThreatLevel::HIGH;
+    threatDatabase_["safari"] = ThreatLevel::HIGH;
+    threatDatabase_["edge"] = ThreatLevel::HIGH;
+    threatDatabase_["opera"] = ThreatLevel::HIGH;
+    threatDatabase_["brave"] = ThreatLevel::MEDIUM;
+    threatDatabase_["arc"] = ThreatLevel::HIGH;
+    threatDatabase_["vivaldi"] = ThreatLevel::HIGH;
+    threatDatabase_["tor"] = ThreatLevel::CRITICAL;
+
+    // Browser process patterns
+    browserExtensionPatterns_.insert("chrome.exe");
+    browserExtensionPatterns_.insert("firefox.exe");
+    browserExtensionPatterns_.insert("msedge.exe");
+    browserExtensionPatterns_.insert("safari.exe");
+    browserExtensionPatterns_.insert("opera.exe");
+    browserExtensionPatterns_.insert("brave.exe");
+    browserExtensionPatterns_.insert("arc.exe");
+    browserExtensionPatterns_.insert("vivaldi.exe");
+}
+
+void ProcessWatcher::InitializeRemoteAccessPatterns() {
+    // Remote Access Tools - CRITICAL THREAT
+    comprehensiveBlacklist_["teamviewer"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["anydesk"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["chrome-remote-desktop"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["parsec"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["splashtop"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["logmein"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["remotepc"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["ammyy"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["ultraviewer"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["supremo"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["connectwise"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["bomgar"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["jump-desktop"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["screens"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["gotomypc"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["join.me"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["dameware"] = ProcessCategory::REMOTE_ACCESS;
+    comprehensiveBlacklist_["radmin"] = ProcessCategory::REMOTE_ACCESS;
+
+    // Set threat levels
+    threatDatabase_["teamviewer"] = ThreatLevel::CRITICAL;
+    threatDatabase_["anydesk"] = ThreatLevel::CRITICAL;
+    threatDatabase_["chrome-remote-desktop"] = ThreatLevel::CRITICAL;
+    threatDatabase_["parsec"] = ThreatLevel::CRITICAL;
+    threatDatabase_["splashtop"] = ThreatLevel::CRITICAL;
+    threatDatabase_["logmein"] = ThreatLevel::CRITICAL;
+    threatDatabase_["remotepc"] = ThreatLevel::CRITICAL;
+    threatDatabase_["ammyy"] = ThreatLevel::CRITICAL;
+    threatDatabase_["ultraviewer"] = ThreatLevel::CRITICAL;
+    threatDatabase_["supremo"] = ThreatLevel::CRITICAL;
+
+    remoteAccessPatterns_.insert("teamviewer");
+    remoteAccessPatterns_.insert("anydesk");
+    remoteAccessPatterns_.insert("chrome-remote");
+    remoteAccessPatterns_.insert("parsec");
+    remoteAccessPatterns_.insert("splashtop");
+    remoteAccessPatterns_.insert("logmein");
+    remoteAccessPatterns_.insert("remotepc");
+    remoteAccessPatterns_.insert("ammyy");
+    remoteAccessPatterns_.insert("ultraviewer");
+    remoteAccessPatterns_.insert("supremo");
+    remoteAccessPatterns_.insert("connectwise");
+    remoteAccessPatterns_.insert("bomgar");
+    remoteAccessPatterns_.insert("jump desktop");
+    remoteAccessPatterns_.insert("screens");
+    remoteAccessPatterns_.insert("gotomypc");
+    remoteAccessPatterns_.insert("join.me");
+    remoteAccessPatterns_.insert("dameware");
+    remoteAccessPatterns_.insert("radmin");
+}
+
+void ProcessWatcher::InitializeScreenSharingPatterns() {
+    // Video Conferencing & Screen Sharing - HIGH THREAT
+    comprehensiveBlacklist_["zoom"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["teams"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["slack"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["discord"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["skype"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["webex"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["gotomeeting"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["bluejeans"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["jitsi"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["whereby"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["meet"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["facetime"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["whatsapp"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["telegram"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["signal"] = ProcessCategory::SCREEN_SHARING;
+    comprehensiveBlacklist_["viber"] = ProcessCategory::SCREEN_SHARING;
+
+    // Gaming & Streaming
+    comprehensiveBlacklist_["obs-studio"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["streamlabs"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["xsplit"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["nvidia-broadcast"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["elgato-stream-deck"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["twitch-studio"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["restream"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["streamyard"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["wirecast"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["vmix"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["bandicam"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["camtasia"] = ProcessCategory::RECORDING;
+    comprehensiveBlacklist_["screenflow"] = ProcessCategory::RECORDING;
+
+    // Set threat levels
+    threatDatabase_["zoom"] = ThreatLevel::HIGH;
+    threatDatabase_["teams"] = ThreatLevel::HIGH;
+    threatDatabase_["slack"] = ThreatLevel::HIGH;
+    threatDatabase_["discord"] = ThreatLevel::HIGH;
+    threatDatabase_["skype"] = ThreatLevel::HIGH;
+    threatDatabase_["obs-studio"] = ThreatLevel::CRITICAL;
+    threatDatabase_["streamlabs"] = ThreatLevel::CRITICAL;
+    threatDatabase_["xsplit"] = ThreatLevel::CRITICAL;
+
+    screenSharingPatterns_.insert("zoom");
+    screenSharingPatterns_.insert("teams");
+    screenSharingPatterns_.insert("microsoft teams");
+    screenSharingPatterns_.insert("slack");
+    screenSharingPatterns_.insert("discord");
+    screenSharingPatterns_.insert("skype");
+    screenSharingPatterns_.insert("webex");
+    screenSharingPatterns_.insert("gotomeeting");
+    screenSharingPatterns_.insert("bluejeans");
+    screenSharingPatterns_.insert("jitsi");
+    screenSharingPatterns_.insert("whereby");
+    screenSharingPatterns_.insert("meet");
+    screenSharingPatterns_.insert("google meet");
+    screenSharingPatterns_.insert("facetime");
+    screenSharingPatterns_.insert("whatsapp");
+    screenSharingPatterns_.insert("telegram");
+    screenSharingPatterns_.insert("signal");
+    screenSharingPatterns_.insert("viber");
+}
+
+void ProcessWatcher::InitializeVPNPatterns() {
+    // VPN Applications - MEDIUM to HIGH THREAT
+    comprehensiveBlacklist_["nordvpn"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["expressvpn"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["surfshark"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["cyberghost"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["ipvanish"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["private-internet-access"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["tunnelbear"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["windscribe"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["protonvpn"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["mullvad"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["hotspot-shield"] = ProcessCategory::VPN_TOOL;
+    comprehensiveBlacklist_["zenmate"] = ProcessCategory::VPN_TOOL;
+
+    // Set threat levels
+    threatDatabase_["nordvpn"] = ThreatLevel::MEDIUM;
+    threatDatabase_["expressvpn"] = ThreatLevel::MEDIUM;
+    threatDatabase_["surfshark"] = ThreatLevel::MEDIUM;
+    threatDatabase_["cyberghost"] = ThreatLevel::MEDIUM;
+    threatDatabase_["protonvpn"] = ThreatLevel::HIGH;
+    threatDatabase_["mullvad"] = ThreatLevel::HIGH;
+
+    vpnPatterns_.insert("nordvpn");
+    vpnPatterns_.insert("expressvpn");
+    vpnPatterns_.insert("surfshark");
+    vpnPatterns_.insert("cyberghost");
+    vpnPatterns_.insert("ipvanish");
+    vpnPatterns_.insert("pia");
+    vpnPatterns_.insert("private internet access");
+    vpnPatterns_.insert("tunnelbear");
+    vpnPatterns_.insert("windscribe");
+    vpnPatterns_.insert("protonvpn");
+    vpnPatterns_.insert("mullvad");
+    vpnPatterns_.insert("hotspot shield");
+    vpnPatterns_.insert("zenmate");
 }
 
 RecordingDetectionResult ProcessWatcher::DetectRecordingAndOverlays() {
@@ -1043,4 +1342,287 @@ std::string ProcessWatcher::CreateRecordingOverlayEventJson(const RecordingDetec
     json << "}";
 
     return json.str();
+}
+
+ProcessCategory ProcessWatcher::CategorizeProcess(const ProcessInfo& process) {
+    std::string lowerName = process.name;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+    std::string lowerPath = process.path;
+    std::transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(), ::tolower);
+
+    // Check comprehensive blacklist first
+    auto it = comprehensiveBlacklist_.find(lowerName);
+    if (it != comprehensiveBlacklist_.end()) {
+        return it->second;
+    }
+
+    // Pattern-based detection for unlisted processes
+    if (aiToolPatterns_.count(lowerName) ||
+        lowerName.find("chatgpt") != std::string::npos ||
+        lowerName.find("claude") != std::string::npos ||
+        lowerName.find("gemini") != std::string::npos ||
+        lowerName.find("copilot") != std::string::npos) {
+        return ProcessCategory::AI_TOOL;
+    }
+
+    if (browserExtensionPatterns_.count(lowerName) ||
+        lowerName.find("chrome") != std::string::npos ||
+        lowerName.find("firefox") != std::string::npos ||
+        lowerName.find("safari") != std::string::npos ||
+        lowerName.find("edge") != std::string::npos) {
+        return ProcessCategory::BROWSER;
+    }
+
+    if (screenSharingPatterns_.count(lowerName) ||
+        lowerName.find("zoom") != std::string::npos ||
+        lowerName.find("teams") != std::string::npos ||
+        lowerName.find("meet") != std::string::npos ||
+        lowerName.find("webex") != std::string::npos) {
+        return ProcessCategory::SCREEN_SHARING;
+    }
+
+    if (remoteAccessPatterns_.count(lowerName) ||
+        lowerName.find("teamviewer") != std::string::npos ||
+        lowerName.find("anydesk") != std::string::npos ||
+        lowerName.find("rdp") != std::string::npos ||
+        lowerName.find("vnc") != std::string::npos) {
+        return ProcessCategory::REMOTE_ACCESS;
+    }
+
+    if (vpnPatterns_.count(lowerName) ||
+        lowerName.find("vpn") != std::string::npos ||
+        lowerName.find("nordvpn") != std::string::npos ||
+        lowerName.find("expressvpn") != std::string::npos) {
+        return ProcessCategory::VPN_TOOL;
+    }
+
+    // Development tools
+    if (lowerName.find("code") != std::string::npos ||
+        lowerName.find("studio") != std::string::npos ||
+        lowerName.find("terminal") != std::string::npos ||
+        lowerName.find("cmd") != std::string::npos ||
+        lowerName.find("powershell") != std::string::npos) {
+        return ProcessCategory::DEVELOPMENT;
+    }
+
+    // Virtual machines
+    if (lowerName.find("vmware") != std::string::npos ||
+        lowerName.find("virtualbox") != std::string::npos ||
+        lowerName.find("parallels") != std::string::npos) {
+        return ProcessCategory::VIRTUAL_MACHINE;
+    }
+
+    // Recording tools
+    if (lowerName.find("obs") != std::string::npos ||
+        lowerName.find("camtasia") != std::string::npos ||
+        lowerName.find("bandicam") != std::string::npos ||
+        lowerName.find("fraps") != std::string::npos) {
+        return ProcessCategory::RECORDING;
+    }
+
+    return ProcessCategory::SAFE;
+}
+
+ThreatLevel ProcessWatcher::CalculateThreatLevel(const ProcessInfo& process, ProcessCategory category) {
+    std::string lowerName = process.name;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+    // Check threat database first
+    auto it = threatDatabase_.find(lowerName);
+    if (it != threatDatabase_.end()) {
+        return it->second;
+    }
+
+    // Category-based threat levels
+    switch (category) {
+        case ProcessCategory::AI_TOOL:
+            return ThreatLevel::CRITICAL;
+        case ProcessCategory::REMOTE_ACCESS:
+            return ThreatLevel::CRITICAL;
+        case ProcessCategory::SCREEN_SHARING:
+            return ThreatLevel::HIGH;
+        case ProcessCategory::BROWSER:
+            return ThreatLevel::HIGH;
+        case ProcessCategory::VPN_TOOL:
+            return ThreatLevel::HIGH;
+        case ProcessCategory::RECORDING:
+            return ThreatLevel::HIGH;
+        case ProcessCategory::DEVELOPMENT:
+            return ThreatLevel::MEDIUM;
+        case ProcessCategory::VIRTUAL_MACHINE:
+            return ThreatLevel::MEDIUM;
+        case ProcessCategory::COMMUNICATION:
+            return ThreatLevel::MEDIUM;
+        case ProcessCategory::OVERLAY_TOOL:
+            return ThreatLevel::LOW;
+        case ProcessCategory::SAFE:
+        default:
+            return ThreatLevel::NONE;
+    }
+}
+
+bool ProcessWatcher::HasScreenCaptureCapability(const ProcessInfo& process) {
+    std::string lowerName = process.name;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+    // Check loaded modules for screen capture APIs
+    for (const auto& module : process.loadedModules) {
+        std::string lowerModule = module;
+        std::transform(lowerModule.begin(), lowerModule.end(), lowerModule.begin(), ::tolower);
+
+#ifdef _WIN32
+        if (lowerModule.find("dxgi") != std::string::npos ||
+            lowerModule.find("d3d11") != std::string::npos ||
+            lowerModule.find("gdi32") != std::string::npos ||
+            lowerModule.find("user32") != std::string::npos) {
+            return true;
+        }
+#elif __APPLE__
+        if (lowerModule.find("screencapturekit") != std::string::npos ||
+            lowerModule.find("coregraphics") != std::string::npos ||
+            lowerModule.find("avfoundation") != std::string::npos) {
+            return true;
+        }
+#endif
+    }
+
+    // Check process name patterns
+    return screenSharingPatterns_.count(lowerName) > 0 ||
+           lowerName.find("screen") != std::string::npos ||
+           lowerName.find("capture") != std::string::npos ||
+           lowerName.find("record") != std::string::npos;
+}
+
+bool ProcessWatcher::HasRemoteAccessCapability(const ProcessInfo& process) {
+    std::string lowerName = process.name;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+    // Check loaded modules for remote access APIs
+    for (const auto& module : process.loadedModules) {
+        std::string lowerModule = module;
+        std::transform(lowerModule.begin(), lowerModule.end(), lowerModule.begin(), ::tolower);
+
+        if (lowerModule.find("rdp") != std::string::npos ||
+            lowerModule.find("vnc") != std::string::npos ||
+            lowerModule.find("remote") != std::string::npos) {
+            return true;
+        }
+    }
+
+    // Check process name patterns
+    return remoteAccessPatterns_.count(lowerName) > 0 ||
+           lowerName.find("remote") != std::string::npos ||
+           lowerName.find("teamviewer") != std::string::npos ||
+           lowerName.find("anydesk") != std::string::npos;
+}
+
+std::string ProcessWatcher::GenerateRiskReason(const ProcessInfo& process, ProcessCategory category, ThreatLevel level) {
+    std::string reason = "Process: " + process.name;
+
+    switch (category) {
+        case ProcessCategory::AI_TOOL:
+            reason += " - AI/ML tool that can provide answers or assistance";
+            break;
+        case ProcessCategory::BROWSER:
+            reason += " - Web browser that can access external resources";
+            break;
+        case ProcessCategory::SCREEN_SHARING:
+            reason += " - Screen sharing application that can transmit exam content";
+            break;
+        case ProcessCategory::REMOTE_ACCESS:
+            reason += " - Remote access tool allowing external control";
+            break;
+        case ProcessCategory::VPN_TOOL:
+            reason += " - VPN software that can mask network activity";
+            break;
+        case ProcessCategory::DEVELOPMENT:
+            reason += " - Development tool with potential for code execution";
+            break;
+        case ProcessCategory::VIRTUAL_MACHINE:
+            reason += " - Virtual machine that can run hidden applications";
+            break;
+        case ProcessCategory::RECORDING:
+            reason += " - Recording software that can capture exam content";
+            break;
+        case ProcessCategory::COMMUNICATION:
+            reason += " - Communication app that can be used for cheating";
+            break;
+        case ProcessCategory::OVERLAY_TOOL:
+            reason += " - Overlay tool that can display unauthorized content";
+            break;
+        default:
+            reason += " - Unclassified process";
+            break;
+    }
+
+    switch (level) {
+        case ThreatLevel::CRITICAL:
+            reason += " (CRITICAL THREAT)";
+            break;
+        case ThreatLevel::HIGH:
+            reason += " (HIGH THREAT)";
+            break;
+        case ThreatLevel::MEDIUM:
+            reason += " (MEDIUM THREAT)";
+            break;
+        case ThreatLevel::LOW:
+            reason += " (LOW THREAT)";
+            break;
+        default:
+            break;
+    }
+
+    return reason;
+}
+
+ThreatLevel ProcessWatcher::ClassifyProcess(const ProcessInfo& process) {
+    ProcessCategory category = CategorizeProcess(process);
+    return CalculateThreatLevel(process, category);
+}
+
+std::vector<ProcessInfo> ProcessWatcher::DetectSuspiciousBehavior() {
+    std::vector<ProcessInfo> suspiciousProcesses;
+    std::vector<ProcessInfo> currentProcesses = GetRunningProcesses();
+
+    for (auto& process : currentProcesses) {
+        ProcessCategory category = CategorizeProcess(process);
+        ThreatLevel threat = CalculateThreatLevel(process, category);
+
+        if (threat > ThreatLevel::NONE) {
+            // Update the process with classification data
+            process.threatLevel = static_cast<int>(threat);
+            process.category = static_cast<int>(category);
+            process.confidence = 0.85; // System-based detection confidence
+            process.riskReason = GenerateRiskReason(process, category, threat);
+            process.flagged = true;
+            process.suspicious = true;
+            process.blacklisted = (threat >= ThreatLevel::HIGH);
+
+            suspiciousProcesses.push_back(process);
+        }
+    }
+
+    return suspiciousProcesses;
+}
+
+std::vector<ProcessInfo> ProcessWatcher::GetProcessSnapshot() {
+    std::vector<ProcessInfo> currentProcesses = GetRunningProcesses();
+
+    // Classify all processes
+    for (auto& process : currentProcesses) {
+        ProcessCategory category = CategorizeProcess(process);
+        ThreatLevel threat = CalculateThreatLevel(process, category);
+
+        // Update the process with classification data
+        process.threatLevel = static_cast<int>(threat);
+        process.category = static_cast<int>(category);
+        process.confidence = 0.80;
+        process.riskReason = GenerateRiskReason(process, category, threat);
+        process.flagged = (threat > ThreatLevel::NONE);
+        process.suspicious = (threat >= ThreatLevel::MEDIUM);
+        process.blacklisted = (threat >= ThreatLevel::HIGH);
+    }
+
+    return currentProcesses;
 }

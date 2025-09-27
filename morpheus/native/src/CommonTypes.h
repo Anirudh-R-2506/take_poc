@@ -9,6 +9,21 @@ struct InputDeviceInfo {
     std::string type;
     bool isExternal;
     std::string deviceId;
+    std::string manufacturer;
+    std::string vendorId;
+    std::string productId;
+    bool isVirtual;
+    bool isSpoofed;
+    bool isBluetooth;
+    bool isWireless;
+    int threatLevel;        // 0=SAFE, 1=SUSPICIOUS, 2=HIGH_RISK, 3=CRITICAL
+    std::string threatReason;
+    bool isAllowed;
+    std::chrono::milliseconds detectionTime;
+
+    InputDeviceInfo() : isExternal(false), isVirtual(false), isSpoofed(false),
+                       isBluetooth(false), isWireless(false), threatLevel(0),
+                       isAllowed(true), detectionTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())) {}
 };
 
 struct StorageDeviceInfo {
@@ -33,6 +48,15 @@ struct ProcessInfo {
     std::string path;
     std::vector<std::string> loadedModules;
     std::vector<std::string> evidence;
+
+    // Process classification fields
+    int threatLevel = 0;      // 0=NONE, 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL
+    int category = 0;         // 0=SAFE, 1=AI_TOOL, 2=BROWSER, etc.
+    double confidence = 0.0;
+    std::string riskReason;
+    bool flagged = false;
+    bool suspicious = false;
+    bool blacklisted = false;
 
     ProcessInfo(int p, const std::string& n, const std::string& pt = "")
         : pid(p), name(n), path(pt) {}
