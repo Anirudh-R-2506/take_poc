@@ -2,6 +2,8 @@
 #include <comdef.h>
 #include <Wbemidl.h>
 #include <oleauto.h>
+#include <sstream>
+#include <vector>
 
 #ifdef _WIN32
 #pragma comment(lib, "wbemuuid.lib")
@@ -34,41 +36,26 @@ SystemInfo SystemDetector::DetectSystemType()
     info.model = QueryWMI("Win32_ComputerSystem", "Model");
     info.chassisType = GetWindowsChassisType();
 
-    // Determine portability
-    if (info.hasBattery || info.chassisType.find("Laptop") != std::string::npos ||
+    // Determine portability based on chassis type and battery
+    if (info.hasBattery ||
+        info.chassisType.find("Laptop") != std::string::npos ||
         info.chassisType.find("Notebook") != std::string::npos ||
-        info.chassisType.find("Portable") != std::string::npos)
+        info.chassisType.find("Portable") != std::string::npos ||
+        info.chassisType.find("Sub Notebook") != std::string::npos)
     {
         info.isPortable = true;
         info.hasLid = true;
+        info.type = SystemType::LAPTOP; // Override type if portable indicators found
     }
 
-#elif __APPLE__
-    info.type = DetectMacOSSystemType();
-    info.hasBattery = DetectMacOSBattery();
-    info.manufacturer = "Apple Inc.";
-
-    size_t size = 0;
-    sysctlbyname("hw.model", nullptr, &size, nullptr, 0);
-    if (size > 0)
-    {
-        std::vector<char> model(size);
-        sysctlbyname("hw.model", model.data(), &size, nullptr, 0);
-        info.model = std::string(model.data());
-    }
-
-    if (info.model.find("MacBook") != std::string::npos)
-    {
+    // Final type validation - if we have battery but detected as desktop, override to laptop
+    if (info.hasBattery && info.type == SystemType::DESKTOP) {
         info.type = SystemType::LAPTOP;
         info.chassisType = "Laptop";
         info.isPortable = true;
         info.hasLid = true;
     }
-    else
-    {
-        info.type = SystemType::DESKTOP;
-        info.chassisType = "Desktop";
-    }
+
 #endif
 
     lastDetection_ = info;
@@ -101,156 +88,223 @@ std::string SystemDetector::GetChassisType()
 }
 
 #ifdef _WIN32
-std::string SystemDetector::QueryWMI(const std::string &wmiClass, const std::string &property)
+
+std::string SystemDetector::QueryWMI(const std::string& wmiClass, const std::string& property)
 {
+    HRESULT hres;
     std::string result;
 
     // Initialize COM
-    HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if (FAILED(hr))
-        return result;
-
-    // Initialize WMI
-    IWbemLocator *pLoc = nullptr;
-    hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID *)&pLoc);
-
-    if (SUCCEEDED(hr))
+    hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres))
     {
-        IWbemServices *pSvc = nullptr;
-        hr = pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, NULL, 0, 0, &pSvc);
-
-        if (SUCCEEDED(hr))
-        {
-            CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
-                              RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
-
-            // Build WQL query
-            std::wstring query = L"SELECT " + std::wstring(property.begin(), property.end()) +
-                                 L" FROM " + std::wstring(wmiClass.begin(), wmiClass.end());
-
-            IEnumWbemClassObject *pEnumerator = nullptr;
-            hr = pSvc->ExecQuery(bstr_t("WQL"), bstr_t(query.c_str()),
-                                 WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumerator);
-
-            if (SUCCEEDED(hr))
-            {
-                IWbemClassObject *pclsObj = nullptr;
-                ULONG uReturn = 0;
-
-                hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-                if (uReturn != 0)
-                {
-                    VARIANT vtProp;
-                    VariantInit(&vtProp);
-
-                    std::wstring propName(property.begin(), property.end());
-                    hr = pclsObj->Get(propName.c_str(), 0, &vtProp, 0, 0);
-                    if (SUCCEEDED(hr))
-                    {
-                        if (vtProp.vt == VT_BSTR && vtProp.bstrVal)
-                        {
-                            int len = WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, nullptr, 0, nullptr, nullptr);
-                            if (len > 0)
-                            {
-                                result.resize(len - 1);
-                                WideCharToMultiByte(CP_UTF8, 0, vtProp.bstrVal, -1, &result[0], len, nullptr, nullptr);
-                            }
-                        }
-                        else if (vtProp.vt == VT_I4)
-                        {
-                            result = std::to_string(vtProp.intVal);
-                        }
-                    }
-                    VariantClear(&vtProp);
-                    pclsObj->Release();
-                }
-
-                pEnumerator->Release();
-            }
-
-            pSvc->Release();
-        }
-
-        pLoc->Release();
+        return "";
     }
 
+    // Set general COM security levels
+    hres = CoInitializeSecurity(
+        NULL,
+        -1,                          // COM authentication
+        NULL,                        // Authentication services
+        NULL,                        // Reserved
+        RPC_C_AUTHN_LEVEL_NONE,      // Default authentication
+        RPC_C_IMP_LEVEL_IMPERSONATE, // Default Impersonation
+        NULL,                        // Authentication info
+        EOAC_NONE,                   // Additional capabilities
+        NULL                         // Reserved
+    );
+
+    if (FAILED(hres))
+    {
+        CoUninitialize();
+        return "";
+    }
+
+    // Obtain the initial locator to WMI
+    IWbemLocator *pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator,
+        0,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID *) &pLoc);
+
+    if (FAILED(hres))
+    {
+        CoUninitialize();
+        return "";
+    }
+
+    // Connect to WMI through the IWbemLocator::ConnectServer method
+    IWbemServices *pSvc = NULL;
+    hres = pLoc->ConnectServer(
+         _bstr_t(L"ROOT\\CIMV2"), // Object path of WMI namespace
+         NULL,                    // User name. NULL = current user
+         NULL,                    // User password. NULL = current
+         0,                       // Locale. NULL indicates current
+         NULL,                    // Security flags.
+         0,                       // Authority (e.g. Kerberos)
+         0,                       // Context object
+         &pSvc                    // pointer to IWbemServices proxy
+         );
+
+    if (FAILED(hres))
+    {
+        pLoc->Release();
+        CoUninitialize();
+        return "";
+    }
+
+    // Set security levels on the proxy
+    hres = CoSetProxyBlanket(
+       pSvc,                        // Indicates the proxy to set
+       RPC_C_AUTHN_WINNT,           // RPC_C_AUTHN_xxx
+       RPC_C_AUTHZ_NONE,            // RPC_C_AUTHZ_xxx
+       NULL,                        // Server principal name
+       RPC_C_AUTHN_LEVEL_CALL,      // RPC_C_AUTHN_LEVEL_xxx
+       RPC_C_IMP_LEVEL_IMPERSONATE, // RPC_C_IMP_LEVEL_xxx
+       NULL,                        // client identity
+       EOAC_NONE                    // proxy capabilities
+    );
+
+    if (FAILED(hres))
+    {
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+        return "";
+    }
+
+    // Execute WMI query
+    std::string query = "SELECT " + property + " FROM " + wmiClass;
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(
+        bstr_t("WQL"),
+        bstr_t(query.c_str()),
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL,
+        &pEnumerator);
+
+    if (FAILED(hres))
+    {
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+        return "";
+    }
+
+    // Get the data from the query
+    IWbemClassObject *pclsObj = NULL;
+    ULONG uReturn = 0;
+
+    while (pEnumerator)
+    {
+        HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+
+        if (0 == uReturn)
+        {
+            break;
+        }
+
+        VARIANT vtProp;
+        hr = pclsObj->Get(_bstr_t(property.c_str()), 0, &vtProp, 0, 0);
+
+        if (SUCCEEDED(hr) && vtProp.vt != VT_NULL)
+        {
+            if (vtProp.vt == VT_BSTR)
+            {
+                _bstr_t bstrVal(vtProp.bstrVal);
+                result = (char*)bstrVal;
+            }
+            else if (vtProp.vt == VT_I4)
+            {
+                result = std::to_string(vtProp.lVal);
+            }
+            else if (vtProp.vt == (VT_ARRAY | VT_I4))
+            {
+                // Handle array of integers (like ChassisTypes)
+                SAFEARRAY* psa = vtProp.parray;
+                if (psa != NULL)
+                {
+                    LONG lBound, uBound;
+                    SafeArrayGetLBound(psa, 1, &lBound);
+                    SafeArrayGetUBound(psa, 1, &uBound);
+
+                    if (lBound <= uBound)
+                    {
+                        LONG* pData;
+                        SafeArrayAccessData(psa, (void**)&pData);
+                        result = std::to_string(pData[0]); // Take first chassis type
+                        SafeArrayUnaccessData(psa);
+                    }
+                }
+            }
+        }
+        VariantClear(&vtProp);
+        pclsObj->Release();
+        break; // Take first result
+    }
+
+    // Cleanup
+    pSvc->Release();
+    pLoc->Release();
+    pEnumerator->Release();
     CoUninitialize();
+
     return result;
 }
 
 SystemType SystemDetector::DetectWindowsSystemType()
 {
-    // Get chassis type from WMI
-    std::string chassisTypes = QueryWMI("Win32_SystemEnclosure", "ChassisTypes");
+    // First check chassis type
+    std::string chassisType = GetWindowsChassisType();
 
-    if (!chassisTypes.empty())
+    if (chassisType.find("Laptop") != std::string::npos ||
+        chassisType.find("Notebook") != std::string::npos ||
+        chassisType.find("Sub Notebook") != std::string::npos ||
+        chassisType.find("Portable") != std::string::npos)
     {
-        int chassisType = std::stoi(chassisTypes);
-
-        // Windows chassis type values:
-        // 8, 9, 10, 14 = Laptop/Portable
-        // 3, 4, 5, 6, 7, 15, 16 = Desktop
-        // 17, 23 = Server
-        // 11, 12, 21, 30, 31, 32 = Handheld/Tablet
-
-        switch (chassisType)
-        {
-        case 8:  // Portable
-        case 9:  // Laptop
-        case 10: // Notebook
-        case 14: // Sub Notebook
-            return SystemType::LAPTOP;
-
-        case 3:  // Desktop
-        case 4:  // Low Profile Desktop
-        case 5:  // Pizza Box
-        case 6:  // Mini Tower
-        case 7:  // Tower
-        case 15: // Space-saving
-        case 16: // Lunch Box
-            return SystemType::DESKTOP;
-
-        case 17: // Main Server Chassis
-        case 23: // Rack Mount Chassis
-            return SystemType::SERVER;
-
-        case 11: // Hand Held
-        case 12: // Docking Station
-        case 21: // Peripheral Chassis
-        case 30: // Tablet
-        case 31: // Convertible
-        case 32: // Detachable
-            return SystemType::TABLET;
-        }
+        return SystemType::LAPTOP;
     }
 
-    // Fallback: Check for battery presence
+    if (chassisType.find("Desktop") != std::string::npos ||
+        chassisType.find("Tower") != std::string::npos ||
+        chassisType.find("Mini Tower") != std::string::npos)
+    {
+        return SystemType::DESKTOP;
+    }
+
+    // Check battery as fallback
     if (DetectWindowsBattery())
     {
         return SystemType::LAPTOP;
     }
 
+    // Default to desktop if uncertain
     return SystemType::DESKTOP;
 }
 
 bool SystemDetector::DetectWindowsBattery()
 {
-    // Use GetSystemPowerStatus for quick battery check
-    SYSTEM_POWER_STATUS powerStatus;
-    if (GetSystemPowerStatus(&powerStatus))
+    // Method 1: Check for battery devices using WMI
+    std::string batteryStatus = QueryWMI("Win32_Battery", "Status");
+    if (!batteryStatus.empty())
     {
-        // If battery flag indicates no system battery (128) or unknown (255), no battery
-        if (powerStatus.BatteryFlag == 128 || powerStatus.BatteryFlag == 255)
-        {
-            return false;
-        }
-        // Any other value indicates battery presence
         return true;
     }
 
-    // Fallback: Use WMI to check for battery devices
-    std::string batteryStatus = QueryWMI("Win32_Battery", "Status");
-    return !batteryStatus.empty();
+    // Method 2: Check system power status
+    SYSTEM_POWER_STATUS powerStatus;
+    if (GetSystemPowerStatus(&powerStatus))
+    {
+        // If ACLineStatus is 255, it means the battery status is unknown but there might be a battery
+        // If BatteryFlag is not 255 (unknown) and not 128 (no battery), there's a battery
+        if (powerStatus.BatteryFlag != 255 && powerStatus.BatteryFlag != 128)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::string SystemDetector::GetWindowsChassisType()
@@ -288,7 +342,7 @@ std::string SystemDetector::GetWindowsChassisType()
         case 12:
             return "Docking Station";
         case 13:
-            return "All in One";
+            return "All In One";
         case 14:
             return "Sub Notebook";
         case 15:
@@ -324,3 +378,5 @@ std::string SystemDetector::GetWindowsChassisType()
 
     return "Unknown";
 }
+
+#endif

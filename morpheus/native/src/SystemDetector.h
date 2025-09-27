@@ -60,6 +60,7 @@ private:
     std::string QueryWMI(const std::string& wmiClass, const std::string& property);
     SystemType DetectWindowsSystemType();
     bool DetectWindowsBattery();
+    std::string GetWindowsChassisType();
 #elif __APPLE__
     std::string GetIORegistryProperty(const std::string& serviceName, const std::string& property);
     SystemType DetectMacOSSystemType();
