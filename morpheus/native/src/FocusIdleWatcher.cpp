@@ -723,7 +723,7 @@ void FocusIdleWatcher::ProcessWindowSwitch(const std::string &appName, const std
     event.details.windowTitle = windowTitle;
     event.details.reason = "realtime-window-switch";
 
-    EmitEvent(event);
+    EmitFocusIdleEvent(event);
 }
 
 FocusIdleEvent FocusIdleWatcher::GetRealtimeFocusStatus()
