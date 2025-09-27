@@ -115,15 +115,27 @@ class ProctorService {
     // Start all workers (used when permissions are granted)
     async startAllWorkers() {
         if (!this.isConnected) return false;
-        
+
         try {
             // Send command to start all workers
-            return window.proctorAPI.sendCommand({ cmd: 'start-all-workers' });
+            return window.proctorAPI.startWorkers();
         } catch (error) {
             return false;
         }
     }
-    
+
+    // Stop all workers (used when exam ends)
+    async stopAllWorkers() {
+        if (!this.isConnected) return false;
+
+        try {
+            // Send command to stop all workers
+            return window.proctorAPI.stopWorkers();
+        } catch (error) {
+            return false;
+        }
+    }
+
     // Get system information
     async getSystemInfo() {
         if (!this.isConnected) return null;

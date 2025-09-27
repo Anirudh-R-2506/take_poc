@@ -270,6 +270,28 @@ const setupIPC = () => {
     }
   });
 
+  // Manual worker shutdown handler
+  ipcMain.handle('proctor:stop-workers', async () => {
+    try {
+      if (!proctorSupervisor) {
+        console.error('[Main IPC] ProctorSupervisor not initialized');
+        return false;
+      }
+
+      console.log('[Main IPC] Stopping all workers manually...');
+      proctorSupervisor.stopAll();
+
+      // Wait a bit to ensure workers have stopped
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      console.log('[Main IPC] All workers stopped successfully');
+      return true;
+    } catch (error) {
+      console.error('[Main IPC] Error stopping workers:', error);
+      return false;
+    }
+  });
+
   // Send command to specific worker
   ipcMain.handle('proctor:send-worker-command', async (event, { workerName, command }) => {
     try {

@@ -100,6 +100,10 @@ contextBridge.exposeInMainWorld('proctorAPI', {
         return ipcRenderer.invoke('proctor:start-workers');
     },
 
+    stopWorkers: () => {
+        return ipcRenderer.invoke('proctor:stop-workers');
+    },
+
     // Send command to specific worker
     sendWorkerCommand: (workerName, command) => {
         if (typeof workerName !== 'string' || !command || typeof command !== 'object') {
