@@ -533,4 +533,102 @@ bool FocusIdleWatcher::IsExamWindowMinimized() {
     return false;
 }
 
+// Windows implementations for missing realtime monitoring methods
+void FocusIdleWatcher::StartRealtimeWindowMonitor() {
+#ifdef _WIN32
+    if (realtimeMonitorRunning_.load()) {
+        return; // Already running
+    }
+
+    if (!config_.enableRealtimeWindowSwitching) {
+        std::cout << "[FocusIdleWatcher] Real-time window monitoring disabled by config" << std::endl;
+        return;
+    }
+
+    std::cout << "[FocusIdleWatcher] Starting real-time window monitoring with " << config_.realtimePollIntervalMs << "ms interval" << std::endl;
+
+    realtimeMonitorRunning_.store(true);
+    realtimeMonitorThread_ = std::thread([this]() {
+        RealtimeMonitorLoop();
+    });
+#endif
+}
+
+void FocusIdleWatcher::StopRealtimeWindowMonitor() {
+#ifdef _WIN32
+    if (!realtimeMonitorRunning_.load()) {
+        return; // Not running
+    }
+
+    realtimeMonitorRunning_.store(false);
+
+    if (realtimeMonitorThread_.joinable()) {
+        realtimeMonitorThread_.join();
+    }
+
+    std::cout << "[FocusIdleWatcher] Real-time window monitoring stopped" << std::endl;
+#endif
+}
+
+void FocusIdleWatcher::RealtimeMonitorLoop() {
+#ifdef _WIN32
+    std::cout << "[FocusIdleWatcher] Real-time monitor loop started" << std::endl;
+
+    while (realtimeMonitorRunning_.load()) {
+        try {
+            std::string windowTitle;
+            std::string newActiveApp = GetFrontmostApplication(windowTitle);
+
+            // Detect window switches
+            if (newActiveApp != currentActiveApp_ || windowTitle != currentWindowTitle_) {
+                ProcessWindowSwitch(newActiveApp, windowTitle);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[FocusIdleWatcher] Error in realtime monitor: " << e.what() << std::endl;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(config_.realtimePollIntervalMs));
+    }
+
+    std::cout << "[FocusIdleWatcher] Real-time monitor loop ended" << std::endl;
+#endif
+}
+
+void FocusIdleWatcher::ProcessWindowSwitch(const std::string& appName, const std::string& windowTitle) {
+#ifdef _WIN32
+    currentActiveApp_ = appName;
+    currentWindowTitle_ = windowTitle;
+
+    // Emit window switch event
+    FocusIdleEvent event;
+    event.eventType = "window-switch";
+    event.timestamp = GetCurrentTimestamp();
+    event.details.activeApp = appName;
+    event.details.windowTitle = windowTitle;
+    event.details.reason = "realtime-window-switch";
+
+    EmitEvent(event);
+#endif
+}
+
+FocusIdleEvent FocusIdleWatcher::GetRealtimeFocusStatus() {
+    FocusIdleEvent status;
+    status.timestamp = GetCurrentTimestamp();
+
+    // Get real-time focus status with enhanced detection
+    bool currentFocus = IsExamWindowFocused();
+
+    if (currentFocus) {
+        status.eventType = "realtime-focused";
+        status.details.reason = "exam-app-focused";
+    } else {
+        status.eventType = "realtime-focus-lost";
+        status.details.activeApp = currentActiveApp_;
+        status.details.windowTitle = currentWindowTitle_;
+        status.details.reason = "real-time-violation";
+    }
+
+    return status;
+}
+
 #endif

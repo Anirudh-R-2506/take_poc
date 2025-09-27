@@ -1091,4 +1091,62 @@ double ScreenWatcher::calculateScreenSharingThreatLevel() {
     return maxThreat;
 }
 
+// Missing method implementations for Windows compilation
+std::vector<ProcessInfo> ScreenWatcher::getRunningProcesses() {
+    std::vector<ProcessInfo> processes;
+
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        return processes;
+    }
+
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    if (Process32First(hSnapshot, &pe32)) {
+        do {
+            ProcessInfo info(pe32.th32ProcessID,
+                           std::string(pe32.szExeFile),
+                           "");
+
+            // Get process path
+            HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe32.th32ProcessID);
+            if (hProcess) {
+                char processPath[MAX_PATH];
+                DWORD pathSize = MAX_PATH;
+                if (QueryFullProcessImageNameA(hProcess, 0, processPath, &pathSize)) {
+                    info.path = std::string(processPath);
+                }
+                CloseHandle(hProcess);
+            }
+
+            processes.push_back(info);
+        } while (Process32Next(hSnapshot, &pe32));
+    }
+
+    CloseHandle(hSnapshot);
+    return processes;
+}
+
+std::vector<std::string> ScreenWatcher::getProcessModules(DWORD processID) {
+    std::vector<std::string> modules;
+
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, processID);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        return modules;
+    }
+
+    MODULEENTRY32 me32;
+    me32.dwSize = sizeof(MODULEENTRY32);
+
+    if (Module32First(hSnapshot, &me32)) {
+        do {
+            modules.push_back(std::string(me32.szModule));
+        } while (Module32Next(hSnapshot, &me32));
+    }
+
+    CloseHandle(hSnapshot);
+    return modules;
+}
+
 #endif

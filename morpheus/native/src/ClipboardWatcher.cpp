@@ -679,6 +679,15 @@ int ClipboardWatcher::GetActiveWindowPID() {
     return static_cast<int>(processId);
 }
 
+bool ClipboardWatcher::ClearClipboard() {
+    if (OpenClipboard(NULL)) {
+        EmptyClipboard();
+        CloseClipboard();
+        return true;
+    }
+    return false;
+}
+
 #elif __APPLE__
 
 void ClipboardWatcher::InitializeMacOSClipboardListener() {
