@@ -16,11 +16,18 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <setupapi.h>
 #include <winusb.h>
 #include <bluetoothapis.h>
 #include <iphlpapi.h>
+#include <comdef.h>
+#include <Wbemidl.h>
+#include <oleauto.h>
+#include <dshow.h>
 #elif __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>

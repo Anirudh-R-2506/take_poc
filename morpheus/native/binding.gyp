@@ -74,7 +74,10 @@
               "dwmapi.lib",
               "shell32.lib",
               "wbemuuid.lib",
-              "oleaut32.lib"
+              "oleaut32.lib",
+              "strmiids.lib",
+              "uuid.lib",
+              "ws2bth.lib"
             ]
           }]
         ]
