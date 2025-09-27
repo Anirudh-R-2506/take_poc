@@ -10,10 +10,6 @@
 #include <psapi.h>
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "psapi.lib")
-#elif __APPLE__
-#include <CoreGraphics/CoreGraphics.h>
-#include <IOKit/IOKitLib.h>
-#include <ApplicationServices/ApplicationServices.h>
 #endif
 
 FocusIdleWatcher::FocusIdleWatcher()
@@ -34,9 +30,6 @@ FocusIdleWatcher::FocusIdleWatcher()
 #ifdef _WIN32
     examHwnd_ = nullptr;
     initializeWindows();
-#elif __APPLE__
-    hasAccessibilityPermission_ = false;
-    initializeMacOS();
 #endif
 }
 
@@ -45,8 +38,6 @@ FocusIdleWatcher::~FocusIdleWatcher()
     Stop();
 #ifdef _WIN32
     cleanupWindows();
-#elif __APPLE__
-    cleanupMacOS();
 #endif
 }
 
@@ -235,9 +226,6 @@ void FocusIdleWatcher::CheckIdleState()
 
 #ifdef _WIN32
     int64_t idleTime = GetWindowsIdleTime();
-#elif __APPLE__
-    double idleTimeSec = GetMacOSIdleTime();
-    int64_t idleTime = static_cast<int64_t>(idleTimeSec * 1000);
 #else
     int64_t idleTime = 0; // Fallback
 #endif
@@ -267,18 +255,6 @@ void FocusIdleWatcher::CheckFocusState()
         std::string windowTitle;
         activeApp = GetForegroundWindowInfo(foregroundHwnd, windowTitle);
     }
-#elif __APPLE__
-    if (CheckAccessibilityPermission())
-    {
-        std::string windowTitle;
-        activeApp = GetFrontmostApplication(windowTitle);
-        currentlyFocused = IsExamWindowFocused();
-    }
-    else
-    {
-        // Fallback without accessibility permission
-        currentlyFocused = true; // Assume focused to avoid false alarms
-    }
 #endif
 
     int64_t currentTime = GetCurrentTimestamp();
@@ -294,8 +270,6 @@ void FocusIdleWatcher::CheckFocusState()
 void FocusIdleWatcher::CheckMinimizeState()
 {
 #ifdef _WIN32
-    bool currentlyMinimized = IsExamWindowMinimized();
-#elif __APPLE__
     bool currentlyMinimized = IsExamWindowMinimized();
 #else
     bool currentlyMinimized = false;
@@ -580,71 +554,6 @@ bool FocusIdleWatcher::IsExamWindowMinimized()
     return IsIconic(examHwnd_) != 0;
 }
 
-#elif __APPLE__
-
-bool FocusIdleWatcher::initializeMacOS()
-{
-    hasAccessibilityPermission_ = CheckAccessibilityPermission();
-    if (!hasAccessibilityPermission_)
-    {
-        std::cout << "[FocusIdleWatcher] Warning: Accessibility permission not granted, focus detection may be limited" << std::endl;
-    }
-    return true;
-}
-
-void FocusIdleWatcher::cleanupMacOS()
-{
-    // Cleanup if needed
-}
-
-bool FocusIdleWatcher::CheckAccessibilityPermission()
-{
-    return AXIsProcessTrusted();
-}
-
-double FocusIdleWatcher::GetMacOSIdleTime()
-{
-    CFTimeInterval idleTime = CGEventSourceSecondsSinceLastEventType(
-        kCGEventSourceStateHIDSystemState, kCGAnyInputEventType);
-    return idleTime;
-}
-
-std::string FocusIdleWatcher::GetFrontmostApplication(std::string &outTitle)
-{
-    NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
-    NSRunningApplication *frontApp = [workspace frontmostApplication];
-
-    if (frontApp)
-    {
-        NSString *appName = [frontApp localizedName];
-        if (appName)
-        {
-            return std::string([appName UTF8String]);
-        }
-    }
-
-    return "";
-}
-
-bool FocusIdleWatcher::IsExamWindowFocused()
-{
-    if (config_.examAppTitle.empty())
-        return true; // Default to focused if no app title set
-
-    std::string windowTitle;
-    std::string frontmostApp = GetFrontmostApplication(windowTitle);
-
-    // Check if the frontmost application matches our exam app
-    return frontmostApp.find(config_.examAppTitle) != std::string::npos;
-}
-
-bool FocusIdleWatcher::IsExamWindowMinimized()
-{
-    // This is more complex on macOS and would require additional Accessibility API calls
-    // For now, return false as a safe default
-    return false;
-}
-
 void FocusIdleWatcher::StartRealtimeWindowMonitor()
 {
     if (realtimeMonitorRunning_.load())
@@ -690,8 +599,9 @@ void FocusIdleWatcher::RealtimeMonitorLoop()
     {
         try
         {
+            HWND foregroundHwnd;
             std::string windowTitle;
-            std::string newActiveApp = GetFrontmostApplication(windowTitle);
+            std::string newActiveApp = GetForegroundWindowInfo(foregroundHwnd, windowTitle);
 
             // Detect window switches
             if (newActiveApp != currentActiveApp_ || windowTitle != currentWindowTitle_)
@@ -751,3 +661,4 @@ FocusIdleEvent FocusIdleWatcher::GetRealtimeFocusStatus()
 }
 
 #endif
+
