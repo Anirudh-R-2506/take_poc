@@ -77,7 +77,9 @@
               "oleaut32.lib",
               "strmiids.lib",
               "uuid.lib",
-              "ws2bth.lib"
+              "ws2bth.lib",
+              "dxgi.lib",
+              "d3d11.lib"
             ]
           }]
         ]
