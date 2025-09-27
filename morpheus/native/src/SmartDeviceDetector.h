@@ -112,6 +112,16 @@ public:
     bool IsLegitimateWebcam(const InputDeviceInfo &device);
     bool IsVirtualCamera(const InputDeviceInfo &device);
     bool IsWebcamAllowed(const InputDeviceInfo &device);
+    bool IsScreenRecordingDevice(const InputDeviceInfo &device);
+    bool IsSuspiciousVideoDevice(const InputDeviceInfo &device);
+    std::string GetVideoDeviceRiskAssessment(const InputDeviceInfo &device);
+
+    // Device Classification
+    std::string ClassifyDeviceType(const InputDeviceInfo &device);
+    std::string GetDeviceRiskCategory(const InputDeviceInfo &device);
+    bool IsHighRiskDeviceCategory(const InputDeviceInfo &device);
+    bool IsKeyboardDevice(const InputDeviceInfo &device);
+    bool IsMouseDevice(const InputDeviceInfo &device);
 
 private:
     std::atomic<bool> running_;
@@ -168,8 +178,6 @@ private:
     void InitializeKnownSpoofers();
 
     // Device Classification
-    bool IsMouseDevice(const InputDeviceInfo &device);
-    bool IsKeyboardDevice(const InputDeviceInfo &device);
     bool IsVirtualDevice(const InputDeviceInfo &device);
     bool IsSpoofedDevice(const InputDeviceInfo &device);
     bool IsBluetoothDevice(const InputDeviceInfo &device);

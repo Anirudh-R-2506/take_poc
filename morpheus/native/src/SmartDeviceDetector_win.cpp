@@ -616,7 +616,7 @@ bool SmartDeviceDetector::DetectWindowsSecondaryDisplays() {
 #endif
 
 // Common methods shared between platforms...
-[Rest of common implementation would be here - similar to macOS version but adapted for cross-platform use]
+// Rest of common implementation would be here - similar to macOS version but adapted for cross-platform use
 
 // Windows-specific network interface detection
 bool SmartDeviceDetector::DetectWindowsNetworkInterfaces() {
@@ -1755,7 +1755,77 @@ bool SmartDeviceDetector::DetectWindowsVirtualDevices() {
         if (SUCCEEDED(hr)) {
             CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
 
-            // Query for devices with virtual patterns
+            // CRITICAL: Check for virtual audio devices first (matches macOS logic)
+            IEnumWbemClassObject* pAudioEnumerator = nullptr;
+            hr = pSvc->ExecQuery(bstr_t("WQL"),
+                bstr_t(L"SELECT * FROM Win32_SoundDevice"),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pAudioEnumerator);
+
+            if (SUCCEEDED(hr)) {
+                IWbemClassObject* pclsObj = nullptr;
+                ULONG uReturn = 0;
+
+                while (pAudioEnumerator) {
+                    hr = pAudioEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+                    if (uReturn == 0) break;
+
+                    VARIANT vtProp;
+                    VariantInit(&vtProp);
+
+                    std::string deviceName, manufacturer;
+
+                    // Get device name
+                    hr = pclsObj->Get(L"Name", 0, &vtProp, 0, 0);
+                    if (SUCCEEDED(hr) && vtProp.vt == VT_BSTR) {
+                        deviceName = ConvertBSTRToString(vtProp.bstrVal);
+                    }
+                    VariantClear(&vtProp);
+
+                    // Get manufacturer
+                    hr = pclsObj->Get(L"Manufacturer", 0, &vtProp, 0, 0);
+                    if (SUCCEEDED(hr) && vtProp.vt == VT_BSTR) {
+                        manufacturer = ConvertBSTRToString(vtProp.bstrVal);
+                    }
+                    VariantClear(&vtProp);
+
+                    // Check for virtual audio device indicators (exact same logic as macOS)
+                    std::string deviceNameLower = deviceName;
+                    std::string manufacturerLower = manufacturer;
+                    std::transform(deviceNameLower.begin(), deviceNameLower.end(), deviceNameLower.begin(), ::tolower);
+                    std::transform(manufacturerLower.begin(), manufacturerLower.end(), manufacturerLower.begin(), ::tolower);
+
+                    if (deviceNameLower.find("virtual") != std::string::npos ||
+                        deviceNameLower.find("loopback") != std::string::npos ||
+                        deviceNameLower.find("vb-audio") != std::string::npos ||
+                        deviceNameLower.find("voicemeeter") != std::string::npos ||
+                        manufacturerLower.find("rogue amoeba") != std::string::npos ||
+                        manufacturerLower.find("soundflower") != std::string::npos ||
+                        manufacturerLower.find("vb-audio") != std::string::npos) {
+
+                        DeviceViolation violation;
+                        violation.deviceName = deviceName;
+                        violation.violationType = "virtual-audio-device";
+                        violation.severity = 4; // CRITICAL (matches macOS)
+                        violation.reason = "Virtual audio device detected - potential audio manipulation";
+                        violation.persistent = true;
+
+                        activeViolations_.push_back(violation);
+                        EmitViolation(violation);
+                        pclsObj->Release();
+                        pAudioEnumerator->Release();
+                        pSvc->Release();
+                        pLoc->Release();
+                        CoUninitialize();
+                        return true; // Match macOS early return behavior
+                    }
+
+                    pclsObj->Release();
+                }
+
+                pAudioEnumerator->Release();
+            }
+
+            // Then check for general virtual devices
             IEnumWbemClassObject* pEnumerator = nullptr;
             hr = pSvc->ExecQuery(bstr_t("WQL"),
                 bstr_t(L"SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE '%ROOT\\%' OR Name LIKE '%Virtual%' OR Name LIKE '%VMware%' OR Name LIKE '%VirtualBox%'"),
@@ -2055,109 +2125,51 @@ bool SmartDeviceDetector::IsVirtualCamera(const InputDeviceInfo& device) {
     return false;
 }
 
-// Enhanced legitimate webcam detection
-bool SmartDeviceDetector::IsLegitimateWebcam(const InputDeviceInfo& device) {
-    std::string manufacturerLower = device.manufacturer;
-    std::string nameLower = device.name;
-    std::string modelLower = device.model;
-
-    std::transform(manufacturerLower.begin(), manufacturerLower.end(), manufacturerLower.begin(), ::tolower);
-    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-    std::transform(modelLower.begin(), modelLower.end(), modelLower.begin(), ::tolower);
-
-    // Known legitimate webcam manufacturers
-    std::set<std::string> legitimateManufacturers = {
-        "logitech", "microsoft", "creative technology", "creative",
-        "razer", "asus", "hp", "dell", "lenovo", "sony", "canon",
-        "elgato", "corsair", "steelseries", "hyperx", "anker",
-        "ausdom", "wansview", "nexigo", "emeet", "papalook",
-        "acer", "toshiba", "samsung", "lg", "panasonic",
-        "webcam technologies", "genius", "a4tech", "trust",
-        "philips", "avermedia", "hauppauge", "blackmagic design"
-    };
-
-    // Check manufacturer
-    for (const auto& manufacturer : legitimateManufacturers) {
-        if (manufacturerLower.find(manufacturer) != std::string::npos) {
-            return true;
-        }
-    }
-
-    // Check for legitimate product patterns in name
-    std::vector<std::string> legitimatePatterns = {
-        "hd webcam", "usb camera", "webcam c", "lifecam", "facetime hd",
-        "integrated camera", "built-in camera", "laptop camera", "notebook camera",
-        "hd camera", "web camera", "usb video", "video capture", "cam hd",
-        "wide angle", "auto focus", "full hd", "1080p", "720p", "4k camera"
-    };
-
-    for (const auto& pattern : legitimatePatterns) {
-        if (nameLower.find(pattern) != std::string::npos) {
-            // Additional check: ensure it's not also flagged as virtual
-            if (!IsVirtualCamera(device)) {
-                return true;
-            }
-        }
-    }
-
-    // Check for legitimate vendor/product ID patterns
-    if (!device.vendorId.empty() && !device.productId.empty() &&
-        device.vendorId != "0x0000" && device.productId != "0x0000" &&
-        device.vendorId != "0xFFFF" && device.productId != "0xFFFF") {
-
-        // Known legitimate vendor IDs
-        std::set<std::string> legitimateVendorIds = {
-            "0x046d", // Logitech
-            "0x045e", // Microsoft
-            "0x041e", // Creative Technology
-            "0x1532", // Razer
-            "0x0b05", // ASUS
-            "0x03f0", // HP
-            "0x413c", // Dell
-            "0x17ef", // Lenovo
-            "0x054c", // Sony
-            "0x04f2", // Chicony Electronics (common in laptops)
-            "0x13d3", // IMC Networks (common in laptops)
-            "0x0c45", // Microdia (common in laptops)
-            "0x05ac"  // Apple
-        };
-
-        if (legitimateVendorIds.find(device.vendorId) != legitimateVendorIds.end()) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-// Additional required methods
+// Additional required methods - EXACT SAME LOGIC AS MACOS
 int SmartDeviceDetector::CalculateThreatLevel(const InputDeviceInfo& device) {
-    int threatLevel = 0;
+    int threat = 0;
 
-    if (device.isVirtual) threatLevel += 3;
-    if (device.isSpoofed) threatLevel += 3;
-    if (device.isExternal && !securityProfile_.allowExternalStorage) threatLevel += 2;
-    if (device.isBluetooth && !securityProfile_.allowBluetooth) threatLevel += 2;
-    if (device.isWireless && !securityProfile_.allowWireless) threatLevel += 1;
+    // Critical threats (exact same as macOS)
+    if (device.isSpoofed) threat = 4;
+    if (device.isVirtual && device.type == "keyboard") threat = 4; // Virtual keyboards are critical
 
-    return (std::min)(threatLevel, 4); // Cap at CRITICAL (4)
+    // High threats (exact same as macOS)
+    if (device.isBluetooth) threat = std::max(threat, 3);
+    if (device.isWireless) threat = std::max(threat, 3);
+    if (device.isVirtual) threat = std::max(threat, 3);
+
+    // Medium threats (exact same as macOS)
+    if (device.isExternal && IsKeyboardDevice(device)) threat = std::max(threat, 2);
+    if (device.isExternal && IsMouseDevice(device)) threat = std::max(threat, 2);
+
+    // Suspicious vendor patterns (exact same as macOS)
+    for (const auto& suspiciousVendor : suspiciousVendors_) {
+        if (device.manufacturer.find(suspiciousVendor) != std::string::npos) {
+            threat = std::max(threat, 2);
+        }
+    }
+
+    return threat;
 }
 
 std::string SmartDeviceDetector::GetThreatReason(const InputDeviceInfo& device) {
     std::vector<std::string> reasons;
 
+    // EXACT SAME LOGIC AS MACOS
+    if (device.isSpoofed) reasons.push_back("Device spoofing detected");
     if (device.isVirtual) reasons.push_back("Virtual device");
-    if (device.isSpoofed) reasons.push_back("Spoofed device");
-    if (device.isExternal) reasons.push_back("External device");
-    if (device.isBluetooth) reasons.push_back("Bluetooth device");
-    if (device.isWireless) reasons.push_back("Wireless device");
+    if (device.isBluetooth) reasons.push_back("Bluetooth connection");
+    if (device.isWireless) reasons.push_back("Wireless connection");
+    if (device.isExternal && !IsDeviceAllowed(device)) reasons.push_back("Unauthorized external device");
 
-    if (reasons.empty()) return "No threat detected";
+    if (reasons.empty()) {
+        return "Device appears safe";
+    }
 
-    std::string result = "Threat factors: ";
+    std::string result;
     for (size_t i = 0; i < reasons.size(); ++i) {
-        if (i > 0) result += ", ";
         result += reasons[i];
+        if (i < reasons.size() - 1) result += "; ";
     }
 
     return result;
@@ -2525,4 +2537,194 @@ bool SmartDeviceDetector::MatchesPattern(const std::string& text, const std::str
 void SmartDeviceDetector::LogSecurityEvent(const std::string& event, int severity) {
     // Log security event (implementation would depend on logging framework)
     // For now, this is a placeholder
+}
+
+// Missing method implementations for production-grade functionality
+
+bool SmartDeviceDetector::IsScreenRecordingDevice(const InputDeviceInfo& device) {
+    std::string nameLower = device.name;
+    std::string manufacturerLower = device.manufacturer;
+
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+    std::transform(manufacturerLower.begin(), manufacturerLower.end(), manufacturerLower.begin(), ::tolower);
+
+    std::vector<std::string> recordingPatterns = {
+        "screen capture", "screen recorder", "desktop capture", "display capture",
+        "obs", "streamlabs", "bandicam", "camtasia", "fraps", "nvidia shadowplay",
+        "amd relive", "game capture", "streaming", "broadcast", "elgato",
+        "capture card", "hdmi capture", "video capture card", "recording device"
+    };
+
+    for (const auto& pattern : recordingPatterns) {
+        if (nameLower.find(pattern) != std::string::npos ||
+            manufacturerLower.find(pattern) != std::string::npos) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool SmartDeviceDetector::IsSuspiciousVideoDevice(const InputDeviceInfo& device) {
+    // Combination of multiple risk factors
+    int suspicionScore = 0;
+
+    if (device.isVirtual) suspicionScore += 3;
+    if (device.isSpoofed) suspicionScore += 3;
+    if (IsScreenRecordingDevice(device)) suspicionScore += 2;
+    if (!IsLegitimateWebcam(device) && !IsBuiltInCamera(device)) suspicionScore += 2;
+
+    // Check for suspicious patterns in device information
+    std::string nameLower = device.name;
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+
+    std::vector<std::string> suspiciousPatterns = {
+        "hidden", "stealth", "spy", "covert", "invisible", "backdoor",
+        "modified", "hacked", "cracked", "bypass", "exploit"
+    };
+
+    for (const auto& pattern : suspiciousPatterns) {
+        if (nameLower.find(pattern) != std::string::npos) {
+            suspicionScore += 2;
+            break;
+        }
+    }
+
+    return suspicionScore >= 3; // Threshold for suspicious behavior
+}
+
+std::string SmartDeviceDetector::GetVideoDeviceRiskAssessment(const InputDeviceInfo& device) {
+    std::vector<std::string> risks;
+
+    if (device.isVirtual) risks.push_back("Virtual camera (high spoofing risk)");
+    if (device.isSpoofed) risks.push_back("Device spoofing detected");
+    if (IsScreenRecordingDevice(device)) risks.push_back("Screen recording capability");
+    if (!IsLegitimateWebcam(device)) risks.push_back("Unknown/untrusted manufacturer");
+    if (!IsBuiltInCamera(device)) risks.push_back("External device");
+
+    if (risks.empty()) {
+        return "Low risk - legitimate built-in camera";
+    }
+
+    std::string assessment = "Risk factors: ";
+    for (size_t i = 0; i < risks.size(); ++i) {
+        if (i > 0) assessment += ", ";
+        assessment += risks[i];
+    }
+
+    return assessment;
+}
+
+std::string SmartDeviceDetector::ClassifyDeviceType(const InputDeviceInfo& device) {
+    std::string nameLower = device.name;
+    std::string typeLower = device.type;
+
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+    std::transform(typeLower.begin(), typeLower.end(), typeLower.begin(), ::tolower);
+
+    // Keyboard classification
+    if (IsKeyboardDevice(device)) {
+        if (nameLower.find("gaming") != std::string::npos ||
+            nameLower.find("mechanical") != std::string::npos) {
+            return "gaming-keyboard";
+        }
+        if (nameLower.find("wireless") != std::string::npos ||
+            device.isBluetooth || device.isWireless) {
+            return "wireless-keyboard";
+        }
+        return "keyboard";
+    }
+
+    // Mouse classification
+    if (IsMouseDevice(device)) {
+        if (nameLower.find("gaming") != std::string::npos ||
+            nameLower.find("optical") != std::string::npos) {
+            return "gaming-mouse";
+        }
+        if (nameLower.find("wireless") != std::string::npos ||
+            device.isBluetooth || device.isWireless) {
+            return "wireless-mouse";
+        }
+        return "mouse";
+    }
+
+    // Video device classification
+    if (typeLower.find("video") != std::string::npos ||
+        nameLower.find("camera") != std::string::npos ||
+        nameLower.find("webcam") != std::string::npos) {
+        if (device.isVirtual) return "virtual-camera";
+        if (IsScreenRecordingDevice(device)) return "screen-recorder";
+        if (IsBuiltInCamera(device)) return "built-in-camera";
+        return "external-camera";
+    }
+
+    // Storage device classification
+    if (typeLower.find("storage") != std::string::npos ||
+        nameLower.find("disk") != std::string::npos ||
+        nameLower.find("drive") != std::string::npos) {
+        if (nameLower.find("usb") != std::string::npos) return "usb-storage";
+        if (nameLower.find("external") != std::string::npos) return "external-storage";
+        return "storage-device";
+    }
+
+    // Audio device classification
+    if (typeLower.find("audio") != std::string::npos ||
+        nameLower.find("microphone") != std::string::npos ||
+        nameLower.find("headset") != std::string::npos ||
+        nameLower.find("speaker") != std::string::npos) {
+        if (device.isBluetooth) return "bluetooth-audio";
+        if (nameLower.find("microphone") != std::string::npos) return "microphone";
+        return "audio-device";
+    }
+
+    // Network device classification
+    if (nameLower.find("network") != std::string::npos ||
+        nameLower.find("ethernet") != std::string::npos ||
+        nameLower.find("wifi") != std::string::npos ||
+        nameLower.find("bluetooth") != std::string::npos) {
+        return "network-device";
+    }
+
+    // Generic classifications
+    if (device.isVirtual) return "virtual-device";
+    if (device.isBluetooth) return "bluetooth-device";
+    if (device.isWireless) return "wireless-device";
+
+    return "unknown-device";
+}
+
+std::string SmartDeviceDetector::GetDeviceRiskCategory(const InputDeviceInfo& device) {
+    int threatLevel = CalculateThreatLevel(device);
+
+    if (device.isVirtual || device.isSpoofed) {
+        return "CRITICAL"; // Always critical for virtual/spoofed devices
+    }
+
+    switch (threatLevel) {
+        case 4: return "CRITICAL";
+        case 3: return "HIGH";
+        case 2: return "MEDIUM";
+        case 1: return "LOW";
+        default: return "MINIMAL";
+    }
+}
+
+bool SmartDeviceDetector::IsHighRiskDeviceCategory(const InputDeviceInfo& device) {
+    std::string deviceType = ClassifyDeviceType(device);
+    std::string riskCategory = GetDeviceRiskCategory(device);
+
+    // High-risk device categories
+    std::set<std::string> highRiskTypes = {
+        "virtual-camera", "screen-recorder", "external-camera",
+        "usb-storage", "external-storage", "virtual-device",
+        "unknown-device"
+    };
+
+    // High-risk categories
+    std::set<std::string> highRiskCategories = {
+        "CRITICAL", "HIGH"
+    };
+
+    return highRiskTypes.find(deviceType) != highRiskTypes.end() ||
+           highRiskCategories.find(riskCategory) != highRiskCategories.end();
 }

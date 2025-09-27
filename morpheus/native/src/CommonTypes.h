@@ -10,6 +10,7 @@ struct InputDeviceInfo {
     bool isExternal;
     std::string deviceId;
     std::string manufacturer;
+    std::string model;
     std::string vendorId;
     std::string productId;
     bool isVirtual;
