@@ -1019,27 +1019,72 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
     case "clipboard-worker":
       return (
         <>
-          {data.eventType === "clipboard-changed" && (
+          {/* Active Clipboard Management Status */}
+          <div className="data-item">
+            <span className="data-label">Protection:</span>
+            <span className={`data-value ${data.activeClearingEnabled ? "normal" : "warning"}`}>
+              {data.activeClearingEnabled ? "Active Clearing" : "Monitoring Only"}
+            </span>
+          </div>
+
+          <div className="data-item">
+            <span className="data-label">Current Status:</span>
+            <span className={`data-value ${
+              data.currentStatus === 'content-detected-and-cleared' ? "normal" :
+              data.currentStatus === 'monitoring' ? "normal" : "warning"
+            }`}>
+              {data.currentStatus === 'content-detected-and-cleared' ? "Content Cleared" :
+               data.currentStatus === 'monitoring' ? "Clean" :
+               data.currentStatus || "Monitoring"}
+            </span>
+          </div>
+
+          {/* Show active clipboard content or clearing status */}
+          {data.eventType === "clipboard-cleared" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Action:</span>
+                <span className="data-value normal">🔄 Auto-Cleared</span>
+              </div>
+              {data.originalContent && (
+                <div className="data-item">
+                  <span className="data-label">Detected:</span>
+                  <span className="data-value" style={{fontSize: "0.8em", maxWidth: "200px", wordBreak: "break-word"}}>
+                    {data.originalContent.length > 40 ?
+                      data.originalContent.substring(0, 40) + "..." :
+                      data.originalContent}
+                  </span>
+                </div>
+              )}
+              {data.sourceApp && (
+                <div className="data-item">
+                  <span className="data-label">From App:</span>
+                  <span className="data-value">{data.sourceApp}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Show current clipboard content if available */}
+          {data.eventType === "clipboard-changed" && data.contentPreview && (
             <>
               {data.sourceApp && (
                 <div className="data-item">
                   <span className="data-label">Source App:</span>
-                  <span className="data-value warning">
+                  <span className="data-value">
                     {data.sourceApp}
                   </span>
                 </div>
               )}
-              {data.contentPreview && (
-                <div className="data-item">
-                  <span className="data-label">Content:</span>
-                  <span className="data-value warning"
-                        style={{fontSize: "0.85em", maxWidth: "200px", wordBreak: "break-word"}}>
-                    {data.contentPreview.length > 50 ?
-                      data.contentPreview.substring(0, 50) + "..." :
-                      data.contentPreview}
-                  </span>
-                </div>
-              )}
+              <div className="data-item">
+                <span className="data-label">Current Content:</span>
+                <span className="data-value"
+                      style={{fontSize: "0.85em", maxWidth: "200px", wordBreak: "break-word"}}>
+                  {data.contentPreview.length > 50 ?
+                    data.contentPreview.substring(0, 50) + "..." :
+                    data.contentPreview}
+                </span>
+              </div>
               {data.isSensitive !== undefined && (
                 <div className="data-item">
                   <span className="data-label">Sensitive:</span>
@@ -1050,10 +1095,20 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
               )}
             </>
           )}
-          {data.eventType !== "clipboard-changed" && (
+
+          {/* Heartbeat/monitoring status */}
+          {(!data.eventType || data.eventType === "heartbeat") && (
             <div className="data-item">
               <span className="data-label">Status:</span>
               <span className="data-value normal">Monitoring</span>
+            </div>
+          )}
+
+          {/* Show clearing strategy */}
+          {data.clearingStrategy && (
+            <div className="data-item">
+              <span className="data-label">Strategy:</span>
+              <span className="data-value normal">{data.clearingStrategy}</span>
             </div>
           )}
         </>

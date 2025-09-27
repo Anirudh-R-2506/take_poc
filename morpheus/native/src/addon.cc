@@ -893,6 +893,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set(Napi::String::New(env, "startProcessWatcher"), Napi::Function::New(env, StartProcessWatcher));
     exports.Set(Napi::String::New(env, "stopProcessWatcher"), Napi::Function::New(env, StopProcessWatcher));
     exports.Set(Napi::String::New(env, "getProcessSnapshot"), Napi::Function::New(env, GetProcessSnapshot));
+    exports.Set(Napi::String::New(env, "getCurrentRunningProcesses"), Napi::Function::New(env, GetProcessSnapshot)); // Alias for compatibility
     exports.Set(Napi::String::New(env, "detectSuspiciousBehavior"), Napi::Function::New(env, DetectSuspiciousBehavior));
 
     

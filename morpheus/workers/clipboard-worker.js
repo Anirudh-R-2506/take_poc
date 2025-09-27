@@ -75,10 +75,13 @@ class ClipboardWorker extends WorkerBase {
                     }
 
                     if (hasChanged) {
-                        // Check if this is a violation (content detected after init clearing)
+                        // Active clipboard clearing strategy: Clear any detected content
                         if (this.clipboardClearedOnInit && this.initializationComplete) {
-                            eventType = 'clipboard-violation';
-                            console.log(`[${this.moduleName}] 🚨 CLIPBOARD VIOLATION: Content detected after initialization clearing!`);
+                            eventType = 'clipboard-cleared';
+                            console.log(`[${this.moduleName}] 🔄 CLIPBOARD CONTENT DETECTED: Automatically clearing...`);
+
+                            // Actively clear the clipboard when content is detected
+                            this.clearClipboardContent();
                         } else {
                             eventType = 'clipboard-changed';
                         }
@@ -88,19 +91,33 @@ class ClipboardWorker extends WorkerBase {
                         console.log(`[${this.moduleName}] Clipboard change detected: ${eventType}`);
                     }
 
+                    // Create enhanced payload with current clipboard status
+                    const payload = {
+                        ...clipboardSnapshot,
+                        eventType: eventType,
+                        module: this.moduleName,
+                        timestamp: Date.now(),
+                        count: this.counter++,
+                        source: 'native',
+                        privacyMode: this.privacyMode,
+                        hasChanged: hasChanged,
+                        // Add active clipboard management info
+                        activeClearingEnabled: true,
+                        currentStatus: hasChanged && this.initializationComplete ? 'content-detected-and-cleared' : 'monitoring',
+                        clearingStrategy: 'automatic'
+                    };
+
+                    // If we cleared the clipboard, modify the content preview to indicate this
+                    if (eventType === 'clipboard-cleared') {
+                        payload.contentPreview = '[CLIPBOARD CLEARED - Content was automatically removed]';
+                        payload.originalContent = clipboardSnapshot.contentPreview || '[Unknown content]';
+                        payload.clearingTimestamp = Date.now();
+                    }
+
                     this.sendToParent({
                         type: 'proctor-event',
                         module: this.moduleName,
-                        payload: {
-                            ...clipboardSnapshot,
-                            eventType: eventType,
-                            module: this.moduleName,
-                            timestamp: Date.now(),
-                            count: this.counter++,
-                            source: 'native',
-                            privacyMode: this.privacyMode,
-                            hasChanged: hasChanged
-                        }
+                        payload: payload
                     });
                     console.log(`[${this.moduleName}] Sent clipboard data to parent: ${eventType}`);
                 } else {
@@ -137,6 +154,34 @@ class ClipboardWorker extends WorkerBase {
             }
         } catch (err) {
             console.error(`[${this.moduleName}] Error clearing clipboard on initialization:`, err);
+        }
+    }
+
+    clearClipboardContent() {
+        console.log(`[${this.moduleName}] Actively clearing clipboard content...`);
+
+        try {
+            if (this.nativeAddon && typeof this.nativeAddon.clearClipboard === 'function') {
+                const success = this.nativeAddon.clearClipboard();
+                if (success) {
+                    console.log(`[${this.moduleName}] ✓ Clipboard content cleared successfully`);
+
+                    // Reset tracking variables since we cleared the clipboard
+                    this.lastClipboardHash = null;
+                    this.lastFormats = null;
+
+                    return true;
+                } else {
+                    console.error(`[${this.moduleName}] Failed to clear clipboard content`);
+                    return false;
+                }
+            } else {
+                console.error(`[${this.moduleName}] clearClipboard method not available`);
+                return false;
+            }
+        } catch (err) {
+            console.error(`[${this.moduleName}] Error clearing clipboard content:`, err);
+            return false;
         }
     }
 

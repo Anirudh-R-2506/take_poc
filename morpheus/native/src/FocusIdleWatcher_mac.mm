@@ -525,13 +525,25 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
     @autoreleasepool {
         NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
         NSRunningApplication* frontApp = [workspace frontmostApplication];
-        NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
 
-        if (frontApp && currentApp) {
+        // Get current application using process ID instead of NSRunningApplication currentApplication
+        // which may not work correctly in worker threads
+        pid_t currentPid = getpid();
+        NSRunningApplication* currentApp = nil;
+
+        NSArray* runningApps = [workspace runningApplications];
+        for (NSRunningApplication* app in runningApps) {
+            if ([app processIdentifier] == currentPid) {
+                currentApp = app;
+                break;
+            }
+        }
+
+        if (frontApp) {
             NSString* frontBundleId = [frontApp bundleIdentifier];
-            NSString* currentBundleId = [currentApp bundleIdentifier];
             pid_t frontPid = [frontApp processIdentifier];
-            pid_t currentPid = [currentApp processIdentifier];
+
+            NSString* currentBundleId = currentApp ? [currentApp bundleIdentifier] : @"unknown";
 
             printf("[FocusIdleWatcher] Focus check: Front=%s (PID:%d), Current=%s (PID:%d)\n",
                    [frontBundleId UTF8String] ?: "unknown",
@@ -546,7 +558,7 @@ bool FocusIdleWatcher::IsExamWindowFocused() {
             }
 
             // Backup check: bundle identifier comparison
-            if (frontBundleId && currentBundleId) {
+            if (frontBundleId && currentApp && currentBundleId) {
                 // Direct match
                 if ([frontBundleId isEqualToString:currentBundleId]) {
                     printf("[FocusIdleWatcher] ✓ Bundle ID match - app is focused\n");

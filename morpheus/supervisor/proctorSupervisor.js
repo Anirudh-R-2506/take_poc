@@ -46,20 +46,27 @@ class ProctorSupervisor extends EventEmitter {
       // Wait for permissions to be ready
       console.log("[ProctorSupervisor] Waiting for permissions...");
       const permissionStatus = await permissionService.waitForPermissions();
-      
+
       if (!permissionStatus.allGranted) {
-        console.warn("[ProctorSupervisor] ⚠️ Not all permissions granted - workers will not start");
+        console.warn(
+          "[ProctorSupervisor] ⚠️ Not all permissions granted - workers will not start"
+        );
         console.log("[ProctorSupervisor] Permission status:", permissionStatus);
         return false;
       }
-      
-      console.log("[ProctorSupervisor] ✅ All permissions granted, starting workers...");
+
+      console.log(
+        "[ProctorSupervisor] ✅ All permissions granted, starting workers..."
+      );
     } catch (error) {
       console.error("[ProctorSupervisor] Failed to get permissions:", error);
       return false;
     }
 
-    console.log("[ProctorSupervisor] Worker modules to start:", this.workerModules);
+    console.log(
+      "[ProctorSupervisor] Worker modules to start:",
+      this.workerModules
+    );
 
     for (const moduleName of this.workerModules) {
       console.log(`[ProctorSupervisor] 📋 Queuing worker: ${moduleName}`);
@@ -67,13 +74,15 @@ class ProctorSupervisor extends EventEmitter {
     }
 
     console.log("[ProctorSupervisor] ✅ All workers startup initiated");
-    
+
     // Log status after a delay
     setTimeout(() => {
       console.log("[ProctorSupervisor] 📊 Worker status after 5 seconds:");
       const status = this.getWorkerStatus();
       for (const [name, info] of Object.entries(status)) {
-        console.log(`[ProctorSupervisor]   ${name}: ${info.running ? '✅ Running' : '❌ Not running'} ${info.pid ? `(PID: ${info.pid})` : ''}`);
+        console.log(
+          `[ProctorSupervisor]   ${name}: ${info.running ? "✅ Running" : "❌ Not running"} ${info.pid ? `(PID: ${info.pid})` : ""}`
+        );
       }
     }, 5000);
   }
@@ -85,7 +94,9 @@ class ProctorSupervisor extends EventEmitter {
     }
 
     const workerPath = path.join(__dirname, "../workers", `${moduleName}.js`);
-    console.log(`[ProctorSupervisor] 🚀 Starting worker: ${moduleName} at ${workerPath}`);
+    console.log(
+      `[ProctorSupervisor] 🚀 Starting worker: ${moduleName} at ${workerPath}`
+    );
 
     try {
       const worker = fork(workerPath, {
@@ -95,21 +106,31 @@ class ProctorSupervisor extends EventEmitter {
 
       // Handle EPIPE errors on worker stdio
       if (worker.stdout) {
-        worker.stdout.on('error', (error) => {
-          if (error.code === 'EPIPE') {
-            console.warn(`[ProctorSupervisor] EPIPE on ${moduleName} stdout, ignoring`);
+        worker.stdout.on("error", (error) => {
+          if (error.code === "EPIPE") {
+            console.warn(
+              `[ProctorSupervisor] EPIPE on ${moduleName} stdout, ignoring`
+            );
           } else {
-            console.error(`[ProctorSupervisor] ${moduleName} stdout error:`, error);
+            console.error(
+              `[ProctorSupervisor] ${moduleName} stdout error:`,
+              error
+            );
           }
         });
       }
 
       if (worker.stderr) {
-        worker.stderr.on('error', (error) => {
-          if (error.code === 'EPIPE') {
-            console.warn(`[ProctorSupervisor] EPIPE on ${moduleName} stderr, ignoring`);
+        worker.stderr.on("error", (error) => {
+          if (error.code === "EPIPE") {
+            console.warn(
+              `[ProctorSupervisor] EPIPE on ${moduleName} stderr, ignoring`
+            );
           } else {
-            console.error(`[ProctorSupervisor] ${moduleName} stderr error:`, error);
+            console.error(
+              `[ProctorSupervisor] ${moduleName} stderr error:`,
+              error
+            );
           }
         });
       }
@@ -136,23 +157,32 @@ class ProctorSupervisor extends EventEmitter {
 
       // Handle worker error
       worker.on("error", (error) => {
-        console.error(`[ProctorSupervisor] ❌ Worker ${moduleName} error:`, error);
+        console.error(
+          `[ProctorSupervisor] ❌ Worker ${moduleName} error:`,
+          error
+        );
         this.handleWorkerExit(moduleName, -1, "ERROR");
       });
 
       // Log stdout/stderr from worker
-      worker.stdout.on('data', (data) => {
-        console.log(`[ProctorSupervisor] [${moduleName}] STDOUT:`, data.toString().trim());
+      worker.stdout.on("data", (data) => {
+        console.log(
+          `[ProctorSupervisor] [${moduleName}] STDOUT:`,
+          data.toString().trim()
+        );
       });
 
-      worker.stderr.on('data', (data) => {
-        console.error(`[ProctorSupervisor] [${moduleName}] STDERR:`, data.toString().trim());
+      worker.stderr.on("data", (data) => {
+        console.error(
+          `[ProctorSupervisor] [${moduleName}] STDERR:`,
+          data.toString().trim()
+        );
       });
 
       console.log(
         `[ProctorSupervisor] ✅ Worker ${moduleName} started with PID ${worker.pid}`
       );
-      
+
       // Send initial command to verify worker is responsive
       setTimeout(() => {
         if (this.workers.has(moduleName)) {
@@ -160,7 +190,6 @@ class ProctorSupervisor extends EventEmitter {
           worker.send({ cmd: "ping", timestamp: Date.now() });
         }
       }, 1000);
-      
     } catch (error) {
       console.error(
         `[ProctorSupervisor] ❌ Failed to start worker ${moduleName}:`,
@@ -175,17 +204,28 @@ class ProctorSupervisor extends EventEmitter {
 
   handleWorkerMessage(moduleName, message) {
     if (!message || typeof message !== "object") {
-      console.warn(`[ProctorSupervisor] Invalid message from ${moduleName}:`, message);
+      console.warn(
+        `[ProctorSupervisor] Invalid message from ${moduleName}:`,
+        message
+      );
       return;
     }
 
     const workerInfo = this.workers.get(moduleName);
     if (!workerInfo) {
-      console.warn(`[ProctorSupervisor] Message from unknown worker ${moduleName}:`, message);
+      console.warn(
+        `[ProctorSupervisor] Message from unknown worker ${moduleName}:`,
+        message
+      );
       return;
     }
 
-    console.log(`[ProctorSupervisor] Message from ${moduleName}:`, JSON.stringify(message, null, 2));
+    if (moduleName !== "process-watch-worker") {
+      console.log(
+        `[ProctorSupervisor] Message from ${moduleName}:`,
+        JSON.stringify(message, null, 2)
+      );
+    }
 
     switch (message.type) {
       case "heartbeat":
@@ -196,11 +236,14 @@ class ProctorSupervisor extends EventEmitter {
         break;
 
       case "proctor-event":
-        console.log(`[ProctorSupervisor] ⚡ Proctor event from ${moduleName}:`, {
-          module: message.module || moduleName,
-          payload: message.payload
-        });
-        
+        console.log(
+          `[ProctorSupervisor] ⚡ Proctor event from ${moduleName}:`,
+          {
+            module: message.module || moduleName,
+            payload: message.payload,
+          }
+        );
+
         // Forward proctor events to renderer process
         if (this.mainWindow && this.mainWindow.webContents) {
           this.mainWindow.webContents.send("proctor:event", {
@@ -208,9 +251,13 @@ class ProctorSupervisor extends EventEmitter {
             payload: message.payload,
             timestamp: Date.now(),
           });
-          console.log(`[ProctorSupervisor] ✓ Forwarded event from ${moduleName} to renderer`);
+          console.log(
+            `[ProctorSupervisor] ✓ Forwarded event from ${moduleName} to renderer`
+          );
         } else {
-          console.error(`[ProctorSupervisor] ✗ Cannot forward event from ${moduleName}: mainWindow not available`);
+          console.error(
+            `[ProctorSupervisor] ✗ Cannot forward event from ${moduleName}: mainWindow not available`
+          );
         }
         break;
 

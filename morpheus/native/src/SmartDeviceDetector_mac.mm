@@ -2,6 +2,7 @@
 #include <sstream>
 #include <algorithm>
 #include <regex>
+#include <iostream>
 
 #ifdef __APPLE__
 #import <Foundation/Foundation.h>
@@ -196,7 +197,15 @@ std::vector<InputDeviceInfo> SmartDeviceDetector::ScanMacOSInputDevices() {
 
 std::string SmartDeviceDetector::GetIORegistryProperty(io_service_t service, const char* property) {
     @autoreleasepool {
+        if (service == IO_OBJECT_NULL || !property) {
+            return "";
+        }
+
         CFStringRef key = CFStringCreateWithCString(kCFAllocatorDefault, property, kCFStringEncodingUTF8);
+        if (!key) {
+            return "";
+        }
+
         CFTypeRef value = IORegistryEntryCreateCFProperty(service, key, kCFAllocatorDefault, 0);
         CFRelease(key);
 
@@ -205,19 +214,23 @@ std::string SmartDeviceDetector::GetIORegistryProperty(io_service_t service, con
         }
 
         std::string result;
-
-        if (CFGetTypeID(value) == CFStringGetTypeID()) {
-            char buffer[256];
-            if (CFStringGetCString((CFStringRef)value, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
-                result = buffer;
+        try {
+            if (CFGetTypeID(value) == CFStringGetTypeID()) {
+                char buffer[256];
+                if (CFStringGetCString((CFStringRef)value, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
+                    result = buffer;
+                }
+            } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+                int numberValue;
+                if (CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &numberValue)) {
+                    std::ostringstream oss;
+                    oss << "0x" << std::hex << numberValue;
+                    result = oss.str();
+                }
             }
-        } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
-            int numberValue;
-            if (CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &numberValue)) {
-                std::ostringstream oss;
-                oss << "0x" << std::hex << numberValue;
-                result = oss.str();
-            }
+        } catch (...) {
+            // Safety net for any CoreFoundation crashes
+            result = "";
         }
 
         CFRelease(value);
@@ -446,12 +459,19 @@ bool SmartDeviceDetector::IsWirelessDevice(const InputDeviceInfo& device) {
 void SmartDeviceDetector::MonitoringLoop() {
     while (running_.load()) {
         try {
-            ScanAndAnalyzeDevices();
-            EmitHeartbeat();
+            @autoreleasepool {
+                ScanAndAnalyzeDevices();
+                EmitHeartbeat();
+            }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
         } catch (const std::exception& e) {
             // Log error but continue monitoring
+            std::cerr << "[SmartDeviceDetector] Error in monitoring loop: " << e.what() << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
+        } catch (...) {
+            // Catch all other exceptions including system crashes
+            std::cerr << "[SmartDeviceDetector] Unknown error in monitoring loop" << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs_));
         }
     }
@@ -575,14 +595,22 @@ std::vector<InputDeviceInfo> SmartDeviceDetector::ScanVideoDevices() {
 
 #ifdef __APPLE__
     @autoreleasepool {
-        // Scan for video devices using AVFoundation approach via IORegistry
-        CFMutableDictionaryRef matchDict = IOServiceMatching("IOVideoDevice");
-        io_iterator_t iterator;
+        io_iterator_t iterator = IO_OBJECT_NULL;
+        try {
+            // Scan for video devices using AVFoundation approach via IORegistry
+            CFMutableDictionaryRef matchDict = IOServiceMatching("IOVideoDevice");
+            if (!matchDict) {
+                return videoDevices; // Failed to create match dictionary
+            }
 
-        if (IOServiceGetMatchingServices(kIOMasterPortDefault, matchDict, &iterator) == KERN_SUCCESS) {
+            kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matchDict, &iterator);
+
+            if (kr != KERN_SUCCESS || iterator == IO_OBJECT_NULL) {
+                return videoDevices; // Failed to get matching services
+            }
+
             io_object_t service;
-
-            while ((service = IOIteratorNext(iterator))) {
+            while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
                 InputDeviceInfo device;
 
                 // Get device properties
@@ -632,49 +660,64 @@ std::vector<InputDeviceInfo> SmartDeviceDetector::ScanVideoDevices() {
                 IOObjectRelease(service);
             }
 
-            IOObjectRelease(iterator);
-        }
-
-        // Also scan USB devices for external webcams
-        matchDict = IOServiceMatching("IOUSBDevice");
-        if (IOServiceGetMatchingServices(kIOMasterPortDefault, matchDict, &iterator) == KERN_SUCCESS) {
-            io_object_t service;
-
-            while ((service = IOIteratorNext(iterator))) {
-                std::string deviceClass = GetIORegistryProperty(service, "bDeviceClass");
-                std::string productName = GetIORegistryProperty(service, "USB Product Name");
-
-                // Check if it's a video device (class 14 = Video)
-                if (deviceClass == "14" || deviceClass == "0xe" ||
-                    productName.find("Camera") != std::string::npos ||
-                    productName.find("Webcam") != std::string::npos ||
-                    productName.find("Video") != std::string::npos) {
-
-                    InputDeviceInfo device;
-                    device.name = productName;
-                    device.manufacturer = GetIORegistryProperty(service, "USB Vendor Name");
-                    device.vendorId = GetIORegistryProperty(service, "idVendor");
-                    device.productId = GetIORegistryProperty(service, "idProduct");
-                    device.type = "video";
-                    device.deviceId = "usb-video:" + device.vendorId + ":" + device.productId + ":" + device.name;
-                    device.isExternal = true;
-
-                    // Threat analysis
-                    device.isVirtual = IsVirtualCamera(device);
-                    device.isSpoofed = IsSpoofedDevice(device);
-                    device.threatLevel = CalculateVideoDeviceThreatLevel(device);
-                    device.threatReason = GetVideoDeviceThreatReason(device);
-                    device.isAllowed = IsWebcamAllowed(device);
-
-                    if (!device.name.empty()) {
-                        videoDevices.push_back(device);
-                    }
-                }
-
-                IOObjectRelease(service);
+            if (iterator != IO_OBJECT_NULL) {
+                IOObjectRelease(iterator);
+                iterator = IO_OBJECT_NULL;
             }
 
-            IOObjectRelease(iterator);
+            // Also scan USB devices for external webcams
+            matchDict = IOServiceMatching("IOUSBDevice");
+            if (!matchDict) {
+                return videoDevices; // Failed to create match dictionary
+            }
+
+            kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matchDict, &iterator);
+            if (kr == KERN_SUCCESS && iterator != IO_OBJECT_NULL) {
+            io_object_t service;
+
+                while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+                    std::string deviceClass = GetIORegistryProperty(service, "bDeviceClass");
+                    std::string productName = GetIORegistryProperty(service, "USB Product Name");
+
+                    // Check if it's a video device (class 14 = Video)
+                    if (deviceClass == "14" || deviceClass == "0xe" ||
+                        productName.find("Camera") != std::string::npos ||
+                        productName.find("Webcam") != std::string::npos ||
+                        productName.find("Video") != std::string::npos) {
+
+                        InputDeviceInfo device;
+                        device.name = productName;
+                        device.manufacturer = GetIORegistryProperty(service, "USB Vendor Name");
+                        device.vendorId = GetIORegistryProperty(service, "idVendor");
+                        device.productId = GetIORegistryProperty(service, "idProduct");
+                        device.type = "video";
+                        device.deviceId = "usb-video:" + device.vendorId + ":" + device.productId + ":" + device.name;
+                        device.isExternal = true;
+
+                        // Threat analysis
+                        device.isVirtual = IsVirtualCamera(device);
+                        device.isSpoofed = IsSpoofedDevice(device);
+                        device.threatLevel = CalculateVideoDeviceThreatLevel(device);
+                        device.threatReason = GetVideoDeviceThreatReason(device);
+                        device.isAllowed = IsWebcamAllowed(device);
+
+                        if (!device.name.empty()) {
+                            videoDevices.push_back(device);
+                        }
+                    }
+
+                    IOObjectRelease(service);
+                }
+
+                if (iterator != IO_OBJECT_NULL) {
+                    IOObjectRelease(iterator);
+                }
+            }
+        } catch (...) {
+            // Clean up any resources and return what we have so far
+            if (iterator != IO_OBJECT_NULL) {
+                IOObjectRelease(iterator);
+            }
         }
     }
 #endif

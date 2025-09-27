@@ -19,6 +19,7 @@
 
 // Import Objective-C frameworks
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <IOKit/IOKitLib.h>
@@ -335,9 +336,37 @@ std::vector<InputDeviceInfo> ScreenWatcher::getMacOSInputDevices() {
     // Set matching criteria for keyboards and mice
     CFMutableDictionaryRef keyboardDict = IOServiceMatching(kIOHIDDeviceKey);
     CFMutableDictionaryRef mouseDict = IOServiceMatching(kIOHIDDeviceKey);
-    
-    IOHIDManagerSetDeviceMatching(hidManager, keyboardDict);
+
+    // Add usage page and usage for keyboard
+    int keyboardUsagePageValue = kHIDPage_GenericDesktop;
+    int keyboardUsageValue = kHIDUsage_GD_Keyboard;
+    CFNumberRef keyboardUsagePage = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &keyboardUsagePageValue);
+    CFNumberRef keyboardUsage = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &keyboardUsageValue);
+    CFDictionarySetValue(keyboardDict, CFSTR(kIOHIDPrimaryUsagePageKey), keyboardUsagePage);
+    CFDictionarySetValue(keyboardDict, CFSTR(kIOHIDPrimaryUsageKey), keyboardUsage);
+
+    // Add usage page and usage for mouse
+    int mouseUsagePageValue = kHIDPage_GenericDesktop;
+    int mouseUsageValue = kHIDUsage_GD_Mouse;
+    CFNumberRef mouseUsagePage = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &mouseUsagePageValue);
+    CFNumberRef mouseUsage = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &mouseUsageValue);
+    CFDictionarySetValue(mouseDict, CFSTR(kIOHIDPrimaryUsagePageKey), mouseUsagePage);
+    CFDictionarySetValue(mouseDict, CFSTR(kIOHIDPrimaryUsageKey), mouseUsage);
+
+    // Create array of matching dictionaries
+    CFMutableArrayRef matchingArray = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    CFArrayAppendValue(matchingArray, keyboardDict);
+    CFArrayAppendValue(matchingArray, mouseDict);
+
+    IOHIDManagerSetDeviceMatchingMultiple(hidManager, matchingArray);
     IOHIDManagerOpen(hidManager, kIOHIDOptionsTypeNone);
+
+    // Clean up
+    CFRelease(keyboardUsagePage);
+    CFRelease(keyboardUsage);
+    CFRelease(mouseUsagePage);
+    CFRelease(mouseUsage);
+    CFRelease(matchingArray);
     
     CFSetRef deviceSet = IOHIDManagerCopyDevices(hidManager);
     if (deviceSet) {
@@ -784,6 +813,38 @@ std::vector<ProcessInfo> ScreenWatcher::getRunningProcesses() {
     return processes;
 }
 
+// Helper function to get process name for PID on macOS
+std::string ScreenWatcher::getProcessNameForPID(pid_t pid) {
+    @autoreleasepool {
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (app) {
+            // Try localized name first, then bundle identifier
+            NSString *name = [app localizedName];
+            if (name && [name length] > 0) {
+                return std::string([name UTF8String]);
+            }
+
+            NSString *bundleId = [app bundleIdentifier];
+            if (bundleId && [bundleId length] > 0) {
+                return std::string([bundleId UTF8String]);
+            }
+        }
+
+        // Fallback: try to get name from process path
+        char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
+        if (proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) > 0) {
+            const char* baseName = strrchr(pathBuffer, '/');
+            if (baseName) {
+                return std::string(baseName + 1);
+            }
+            return std::string(pathBuffer);
+        }
+
+        // Last resort: use the PID
+        return "Process " + std::to_string(pid);
+    }
+}
+
 std::string ScreenWatcher::createRecordingOverlayEventJson(const RecordingDetectionResult& result) {
     std::time_t now = std::time(nullptr);
     std::ostringstream json;
@@ -1103,18 +1164,14 @@ std::vector<OverlayWindow> ScreenWatcher::enumerateWindowsForOverlays() {
                 CFNumberGetValue(pidRef, kCFNumberIntType, &pid);
             }
             
-            // Get process name
-            char processName[256] = "Unknown";
+            // Get process name using more robust method
+            std::string processName = "Unknown App";
             std::string processPath;
             if (pid > 0) {
+                processName = getProcessNameForPID(pid);
                 char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
                 if (proc_pidpath(pid, pathBuffer, sizeof(pathBuffer)) > 0) {
                     processPath = std::string(pathBuffer);
-                    const char* baseName = strrchr(pathBuffer, '/');
-                    if (baseName) {
-                        strncpy(processName, baseName + 1, sizeof(processName) - 1);
-                        processName[sizeof(processName) - 1] = '\0';
-                    }
                 }
             }
             
@@ -1258,6 +1315,39 @@ std::vector<ScreenSharingSession> ScreenWatcher::detectMacOSScreenCaptureKit() {
             for (const auto& process : processes) {
                 bool hasScreenCaptureKit = false;
 
+                // Filter out system and legitimate processes first
+                std::string lowerName = process.name;
+                std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+                // Skip system processes and legitimate apps that commonly use ScreenCaptureKit
+                bool isSystemOrLegitimate = (
+                    lowerName.find("windowserver") != std::string::npos ||
+                    lowerName.find("screensaverengine") != std::string::npos ||
+                    lowerName.find("loginwindow") != std::string::npos ||
+                    lowerName.find("systemuiserver") != std::string::npos ||
+                    lowerName.find("controlcenter") != std::string::npos ||
+                    lowerName.find("dock") != std::string::npos ||
+                    lowerName.find("finder") != std::string::npos ||
+                    lowerName.find("spotlight") != std::string::npos ||
+                    lowerName.find("menubar") != std::string::npos ||
+                    lowerName.find("notificationcenter") != std::string::npos ||
+                    lowerName.find("quicktime") != std::string::npos ||
+                    lowerName.find("screenshot") != std::string::npos ||
+                    lowerName.find("magnifier") != std::string::npos ||
+                    lowerName.find("accessibility") != std::string::npos ||
+                    lowerName.find("voiceover") != std::string::npos ||
+                    lowerName.find("coreaudiod") != std::string::npos ||
+                    lowerName.find("kernel_task") != std::string::npos ||
+                    lowerName.find("launchd") != std::string::npos ||
+                    process.path.find("/System/") != std::string::npos ||
+                    process.path.find("/usr/libexec/") != std::string::npos ||
+                    process.path.find("/usr/sbin/") != std::string::npos
+                );
+
+                if (isSystemOrLegitimate) {
+                    continue; // Skip system processes
+                }
+
                 // Check loaded libraries for ScreenCaptureKit
                 std::vector<std::string> libraries = getProcessLibraries(process.pid);
                 for (const auto& lib : libraries) {
@@ -1273,17 +1363,38 @@ std::vector<ScreenSharingSession> ScreenWatcher::detectMacOSScreenCaptureKit() {
                 }
 
                 if (hasScreenCaptureKit) {
-                    ScreenSharingSession session;
-                    session.method = ScreenSharingMethod::SCREENCAPTUREKIT;
-                    session.processName = process.name;
-                    session.pid = process.pid;
-                    session.description = "ScreenCaptureKit API usage detected";
-                    session.confidence = 0.9;
-                    session.isActive = true;
+                    // Additional validation: Check if process is actually doing suspicious screen capture
+                    bool isSuspiciousCapture = false;
 
-                    // Only report sessions that meet confidence threshold
-                    if (session.confidence >= screenSharingConfidenceThreshold_) {
-                        sessions.push_back(session);
+                    // Look for screen sharing/recording patterns
+                    if (lowerName.find("zoom") != std::string::npos ||
+                        lowerName.find("teams") != std::string::npos ||
+                        lowerName.find("meet") != std::string::npos ||
+                        lowerName.find("webex") != std::string::npos ||
+                        lowerName.find("obs") != std::string::npos ||
+                        lowerName.find("screencast") != std::string::npos ||
+                        lowerName.find("record") != std::string::npos ||
+                        lowerName.find("capture") != std::string::npos ||
+                        lowerName.find("vnc") != std::string::npos ||
+                        lowerName.find("teamviewer") != std::string::npos ||
+                        lowerName.find("anydesk") != std::string::npos) {
+                        isSuspiciousCapture = true;
+                    }
+
+                    // Only report if it's actually suspicious
+                    if (isSuspiciousCapture) {
+                        ScreenSharingSession session;
+                        session.method = ScreenSharingMethod::SCREENCAPTUREKIT;
+                        session.processName = process.name;
+                        session.pid = process.pid;
+                        session.description = "ScreenCaptureKit API usage detected";
+                        session.confidence = 0.9;
+                        session.isActive = true;
+
+                        // Only report sessions that meet confidence threshold
+                        if (session.confidence >= screenSharingConfidenceThreshold_) {
+                            sessions.push_back(session);
+                        }
                     }
                 }
             }

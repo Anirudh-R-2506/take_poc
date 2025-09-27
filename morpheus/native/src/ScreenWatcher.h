@@ -182,6 +182,10 @@ private:
     void initializeRecordingBlacklist();
     std::vector<ProcessInfo> getRunningProcesses();
 
+#ifdef __APPLE__
+    std::string getProcessNameForPID(pid_t pid);
+#endif
+
     // Enhanced 2025 analysis methods
     double calculateScreenSharingConfidence(const std::vector<ScreenSharingSession>& sessions);
     ScreenSharingMethod identifyScreenSharingMethod(const ProcessInfo& process);
