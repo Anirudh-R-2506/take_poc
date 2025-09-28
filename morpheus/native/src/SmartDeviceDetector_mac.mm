@@ -11,6 +11,37 @@
 #import <SystemConfiguration/SystemConfiguration.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <IOBluetooth/IOBluetooth.h>
+
+// Helper function to get IORegistry property from service
+std::string GetIORegistryProperty(io_object_t service, const char* propertyName) {
+    if (service == IO_OBJECT_NULL || !propertyName) {
+        return "";
+    }
+
+    CFTypeRef property = IORegistryEntryCreateCFProperty(service,
+                                                        CFStringCreateWithCString(kCFAllocatorDefault, propertyName, kCFStringEncodingUTF8),
+                                                        kCFAllocatorDefault, 0);
+    if (!property) {
+        return "";
+    }
+
+    std::string result;
+
+    if (CFGetTypeID(property) == CFStringGetTypeID()) {
+        char buffer[256];
+        if (CFStringGetCString((CFStringRef)property, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
+            result = std::string(buffer);
+        }
+    } else if (CFGetTypeID(property) == CFNumberGetTypeID()) {
+        int value;
+        if (CFNumberGetValue((CFNumberRef)property, kCFNumberIntType, &value)) {
+            result = std::to_string(value);
+        }
+    }
+
+    CFRelease(property);
+    return result;
+}
 #endif
 
 SmartDeviceDetector::SmartDeviceDetector() : running_(false), counter_(0), intervalMs_(1000) {
@@ -1590,4 +1621,94 @@ bool SmartDeviceDetector::DetectMacOSBluetoothDevices() {
     }
 
     return violationDetected;
+}
+
+std::vector<StorageDeviceInfo> SmartDeviceDetector::ScanMacOSStorageDevices() {
+    std::vector<StorageDeviceInfo> devices;
+    @autoreleasepool {
+        try {
+            // Scan storage devices using IOKit
+            CFMutableDictionaryRef matchDict = IOServiceMatching("IOMedia");
+            if (matchDict == NULL) {
+                std::cerr << "[SmartDeviceDetector] Failed to create IOMedia matching dictionary" << std::endl;
+                return devices;
+            }
+
+            io_iterator_t iterator;
+            kern_return_t result = IOServiceGetMatchingServices(kIOMasterPortDefault, matchDict, &iterator);
+
+            if (result == KERN_SUCCESS) {
+                io_object_t service;
+
+                while ((service = IOIteratorNext(iterator))) {
+                    try {
+                        // Get device properties
+                        std::string deviceName = GetIORegistryProperty(service, "Name");
+                        std::string deviceType = GetIORegistryProperty(service, "Content");
+                        std::string bsdName = GetIORegistryProperty(service, "BSD Name");
+                        std::string size = GetIORegistryProperty(service, "Size");
+                        std::string removable = GetIORegistryProperty(service, "Removable");
+
+                        // Skip empty or invalid entries
+                        if (deviceName.empty() && bsdName.empty()) {
+                            IOObjectRelease(service);
+                            continue;
+                        }
+
+                        // Create storage device info
+                        std::string name = deviceName.empty() ? bsdName : deviceName;
+                        std::string type = deviceType.empty() ? "storage" : deviceType;
+                        std::string path = bsdName.empty() ? "" : "/dev/" + bsdName;
+
+                        StorageDeviceInfo device(bsdName, type, name, path);
+
+                        // Determine if external (removable media)
+                        device.isExternal = (removable == "1" || removable == "true" ||
+                                           deviceName.find("USB") != std::string::npos ||
+                                           deviceName.find("External") != std::string::npos);
+
+                        // Only add valid storage devices
+                        if (!device.name.empty() && !device.id.empty()) {
+                            devices.push_back(device);
+                        }
+
+                    } catch (const std::exception& e) {
+                        std::cerr << "[SmartDeviceDetector] Error processing storage device: " << e.what() << std::endl;
+                    }
+
+                    IOObjectRelease(service);
+                }
+
+                IOObjectRelease(iterator);
+            } else {
+                std::cerr << "[SmartDeviceDetector] Failed to get IOMedia services: " << result << std::endl;
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "[SmartDeviceDetector] Exception in ScanMacOSStorageDevices: " << e.what() << std::endl;
+        }
+    }
+
+    return devices;
+}
+
+
+std::vector<StorageDeviceInfo> SmartDeviceDetector::ScanAllStorageDevices() {
+    return ScanMacOSStorageDevices();
+}
+
+bool SmartDeviceDetector::DetectNetworkInterfaces() {
+    return DetectMacOSNetworkInterfaces();
+}
+
+bool SmartDeviceDetector::DetectMobileDevices() {
+    return DetectMacOSMobileDevices();
+}
+
+bool SmartDeviceDetector::DetectBluetoothSpoofers() {
+    return DetectMacOSBluetoothDevices();
+}
+
+bool SmartDeviceDetector::DetectVirtualDevices() {
+    return DetectMacOSVirtualDevices();
 }

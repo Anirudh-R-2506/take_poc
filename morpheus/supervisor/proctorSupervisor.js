@@ -14,8 +14,8 @@ class ProctorSupervisor extends EventEmitter {
     // Define all worker modules
     this.workerModules = [
       "process-watch-worker",
-      "device-watch-worker", // External device monitoring (includes Bluetooth via SmartDeviceDetector)
-      "screen-watch-worker", // Includes recording/overlay detection
+      "device-watch-worker",
+      "screen-watch-worker",
       "notification-blocker-worker",
       "vm-detect-worker",
       "clipboard-worker",
@@ -164,20 +164,27 @@ class ProctorSupervisor extends EventEmitter {
         this.handleWorkerExit(moduleName, -1, "ERROR");
       });
 
-      // Log stdout/stderr from worker
-      worker.stdout.on("data", (data) => {
-        console.log(
-          `[ProctorSupervisor] [${moduleName}] STDOUT:`,
-          data.toString().trim()
-        );
-      });
+      // Log stdout/stderr from worker (only for specific workers we're debugging)
+      const targetWorkers = ["device-watch-worker", "screen-watch-worker"];
+      if (targetWorkers.includes(moduleName)) {
+        worker.stdout.on("data", (data) => {
+          console.log(
+            `[🔍 DEBUG] [${moduleName}] STDOUT:`,
+            data.toString().trim()
+          );
+        });
 
-      worker.stderr.on("data", (data) => {
-        console.error(
-          `[ProctorSupervisor] [${moduleName}] STDERR:`,
-          data.toString().trim()
-        );
-      });
+        worker.stderr.on("data", (data) => {
+          console.error(
+            `[🔍 DEBUG] [${moduleName}] STDERR:`,
+            data.toString().trim()
+          );
+        });
+      } else {
+        // Silent handling for other workers
+        worker.stdout.on("data", () => {});
+        worker.stderr.on("data", () => {});
+      }
 
       console.log(
         `[ProctorSupervisor] ✅ Worker ${moduleName} started with PID ${worker.pid}`
@@ -220,9 +227,11 @@ class ProctorSupervisor extends EventEmitter {
       return;
     }
 
-    if (moduleName !== "process-watch-worker") {
+    // Logs only these workers
+    const targetWorkers = ["device-watch-worker", "screen-watch-worker"];
+    if (targetWorkers.includes(moduleName)) {
       console.log(
-        `[ProctorSupervisor] Message from ${moduleName}:`,
+        `[🔍 DEBUG] Message from ${moduleName}:`,
         JSON.stringify(message, null, 2)
       );
     }
@@ -230,19 +239,20 @@ class ProctorSupervisor extends EventEmitter {
     switch (message.type) {
       case "heartbeat":
         workerInfo.lastHeartbeat = Date.now();
-        console.log(
-          `[ProctorSupervisor] ✓ Heartbeat from ${moduleName} (PID: ${message.pid})`
-        );
+        if (targetWorkers.includes(moduleName)) {
+          console.log(
+            `[🔍 DEBUG] ✓ Heartbeat from ${moduleName} (PID: ${message.pid})`
+          );
+        }
         break;
 
       case "proctor-event":
-        console.log(
-          `[ProctorSupervisor] ⚡ Proctor event from ${moduleName}:`,
-          {
+        if (targetWorkers.includes(moduleName)) {
+          console.log(`[🔍 DEBUG] ⚡ Proctor event from ${moduleName}:`, {
             module: message.module || moduleName,
             payload: message.payload,
-          }
-        );
+          });
+        }
 
         // Forward proctor events to renderer process
         if (this.mainWindow && this.mainWindow.webContents) {
@@ -251,9 +261,11 @@ class ProctorSupervisor extends EventEmitter {
             payload: message.payload,
             timestamp: Date.now(),
           });
-          console.log(
-            `[ProctorSupervisor] ✓ Forwarded event from ${moduleName} to renderer`
-          );
+          if (targetWorkers.includes(moduleName)) {
+            console.log(
+              `[🔍 DEBUG] ✓ Forwarded event from ${moduleName} to renderer`
+            );
+          }
         } else {
           console.error(
             `[ProctorSupervisor] ✗ Cannot forward event from ${moduleName}: mainWindow not available`

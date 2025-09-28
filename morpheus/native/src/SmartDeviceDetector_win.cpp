@@ -128,13 +128,7 @@ void SmartDeviceDetector::UpdateSecurityProfile() {
 }
 
 std::vector<InputDeviceInfo> SmartDeviceDetector::ScanAllInputDevices() {
-#ifdef _WIN32
     return ScanWindowsInputDevices();
-#elif __APPLE__
-    return ScanMacOSInputDevices();
-#else
-    return std::vector<InputDeviceInfo>();
-#endif
 }
 
 #ifdef _WIN32
@@ -1696,46 +1690,22 @@ void SmartDeviceDetector::ScanAndAnalyzeDevices() {
 
 // Cross-platform secondary display detection
 bool SmartDeviceDetector::DetectSecondaryDisplays() {
-#ifdef _WIN32
     return DetectWindowsSecondaryDisplays();
-#elif __APPLE__
-    return DetectMacOSSecondaryDisplays();
-#else
-    return false;
-#endif
 }
 
 // Cross-platform network interface detection
 bool SmartDeviceDetector::DetectNetworkInterfaces() {
-#ifdef _WIN32
     return DetectWindowsNetworkInterfaces();
-#elif __APPLE__
-    return DetectMacOSNetworkInterfaces();
-#else
-    return false;
-#endif
 }
 
 // Cross-platform mobile device detection
 bool SmartDeviceDetector::DetectMobileDevices() {
-#ifdef _WIN32
     return DetectWindowsMobileDevices();
-#elif __APPLE__
-    return DetectMacOSMobileDevices();
-#else
-    return false;
-#endif
 }
 
 // Cross-platform Bluetooth device detection
 bool SmartDeviceDetector::DetectBluetoothSpoofers() {
-#ifdef _WIN32
     return DetectWindowsBluetoothDevices();
-#elif __APPLE__
-    return DetectMacOSBluetoothDevices();
-#else
-    return false;
-#endif
 }
 
 // Windows-specific virtual device detection
@@ -1900,24 +1870,12 @@ bool SmartDeviceDetector::DetectWindowsVirtualDevices() {
 
 // Windows-specific storage device scanning
 std::vector<StorageDeviceInfo> SmartDeviceDetector::ScanAllStorageDevices() {
-#ifdef _WIN32
     return ScanWindowsStorageDevices();
-#elif __APPLE__
-    return ScanMacOSStorageDevices();
-#else
-    return std::vector<StorageDeviceInfo>();
-#endif
 }
 
 // Windows-specific virtual device detection method
 bool SmartDeviceDetector::DetectVirtualDevices() {
-#ifdef _WIN32
     return DetectWindowsVirtualDevices();
-#elif __APPLE__
-    return DetectMacOSVirtualDevices();
-#else
-    return false;
-#endif
 }
 
 // Device classification helper methods (need to be implemented)

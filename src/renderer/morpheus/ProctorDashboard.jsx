@@ -764,20 +764,14 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
       return (
         <>
           <div className="data-item">
-            <span className="data-label">Blacklisted:</span>
-            <span className={`data-value ${data.blacklisted_found ? "warning" : "normal"}`}>
-              {data.blacklisted_found ? "YES" : "NO"}
-            </span>
-          </div>
-          <div className="data-item">
-            <span className="data-label">Violations:</span>
+            <span className="data-label">Status:</span>
             <span className={`data-value ${data.violations?.length > 0 ? "warning" : "normal"}`}>
-              {data.violations?.length || 0}
+              {data.violations?.length > 0 ? `${data.violations.length} Violations` : "Clean"}
             </span>
           </div>
           {data.max_threat_level && data.max_threat_level !== 'NONE' && (
             <div className="data-item">
-              <span className="data-label">Max Threat:</span>
+              <span className="data-label">Threat Level:</span>
               <span className={`data-value ${data.max_threat_level === 'CRITICAL' || data.max_threat_level === 'HIGH' ? "warning" : "normal"}`}>
                 {data.max_threat_level}
               </span>
@@ -788,20 +782,6 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
               <ProcessViolationsTable violations={data.violations} />
             </div>
           )}
-          {data.threat_count && (
-            <div className="data-item">
-              <span className="data-label">Threats:</span>
-              <span className="data-value">
-                {data.threat_count.critical}C {data.threat_count.high}H {data.threat_count.medium}M {data.threat_count.low}L
-              </span>
-            </div>
-          )}
-          {data.total_processes && (
-            <div className="data-item">
-              <span className="data-label">Total Processes:</span>
-              <span className="data-value">{data.total_processes}</span>
-            </div>
-          )}
         </>
       );
 
@@ -809,16 +789,30 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
       return (
         <>
           <div className="data-item">
-            <span className="data-label">VM Detected:</span>
+            <span className="data-label">Status:</span>
             <span className={`data-value ${data.isInsideVM ? "warning" : "normal"}`}>
-              {data.isInsideVM ? "YES" : "NO"}
+              {data.isInsideVM ? "VM Detected" : "Physical Machine"}
             </span>
           </div>
-          {data.detectedVM && data.detectedVM !== "None" && (
-            <div className="data-item">
-              <span className="data-label">VM Type:</span>
-              <span className="data-value warning">{data.detectedVM}</span>
-            </div>
+          {data.isInsideVM && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">Virtual Machine</span>
+              </div>
+              {data.detectedVM && data.detectedVM !== "None" && (
+                <div className="data-item">
+                  <span className="data-label">VM Type:</span>
+                  <span className="data-value warning">{data.detectedVM}</span>
+                </div>
+              )}
+              {data.confidence && (
+                <div className="data-item">
+                  <span className="data-label">Confidence:</span>
+                  <span className="data-value">{Math.round(data.confidence * 100)}%</span>
+                </div>
+              )}
+            </>
           )}
         </>
       );
@@ -827,63 +821,58 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
       return (
         <>
           <div className="data-item">
-            <span className="data-label">Screen Captured:</span>
-            <span className={`data-value ${data.isScreenCaptured ? "warning" : "normal"}`}>
-              {data.isScreenCaptured ? "YES" : "NO"}
-            </span>
-          </div>
-          <div className="data-item">
-            <span className="data-label">Sessions:</span>
-            <span className={`data-value ${data.total_sessions > 0 ? "warning" : "normal"}`}>
-              {data.total_sessions || 0}
+            <span className="data-label">Status:</span>
+            <span className={`data-value ${data.isScreenCaptured || data.total_sessions > 0 ? "warning" : "normal"}`}>
+              {data.isScreenCaptured ? "Screen Captured" :
+               data.total_sessions > 0 ? `${data.total_sessions} Active Sessions` : "Secure"}
             </span>
           </div>
           {data.max_threat_level && data.max_threat_level !== 'NONE' && (
             <div className="data-item">
-              <span className="data-label">Max Threat:</span>
+              <span className="data-label">Threat Level:</span>
               <span className={`data-value ${data.max_threat_level === 'CRITICAL' || data.max_threat_level === 'HIGH' ? "warning" : "normal"}`}>
                 {data.max_threat_level}
               </span>
             </div>
           )}
           {data.violations && data.violations.length > 0 && (
-            <div className="data-item full-width">
-              <div className="violations-container">
-                <h5>Screen Sharing Violations:</h5>
-                {data.violations.slice(0, 3).map((violation, index) => (
-                  <div key={index} className="violation-item">
-                    <div className="violation-header">
-                      <strong>{violation.appName || 'Unknown App'}</strong>
-                      <span className={`threat-badge ${violation.threatLevel?.toLowerCase()}`}>
-                        {violation.threatLevel}
-                      </span>
-                    </div>
-                    <div className="violation-details">
-                      <span>Method: {violation.method}</span>
-                      {violation.confidence && <span>Confidence: {Math.round(violation.confidence * 100)}%</span>}
-                    </div>
-                    {violation.details && (
-                      <div className="violation-description">
-                        {violation.details}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {data.violations.length > 3 && (
-                  <div className="more-violations">
-                    +{data.violations.length - 3} more violations
-                  </div>
-                )}
+            <>
+              <div className="data-item">
+                <span className="data-label">Violations:</span>
+                <span className="data-value warning">
+                  {data.violations.length} detected
+                </span>
               </div>
-            </div>
-          )}
-          {data.threat_count && (
-            <div className="data-item">
-              <span className="data-label">Threats:</span>
-              <span className="data-value">
-                {data.threat_count.critical}C {data.threat_count.high}H {data.threat_count.medium}M {data.threat_count.low}L
-              </span>
-            </div>
+              <div className="data-item full-width">
+                <div className="violations-container">
+                  <h5>Screen Sharing Violations:</h5>
+                  {data.violations.slice(0, 3).map((violation, index) => (
+                    <div key={index} className="violation-item">
+                      <div className="violation-header">
+                        <strong>{violation.appName || 'Unknown App'}</strong>
+                        <span className={`threat-badge ${violation.threatLevel?.toLowerCase()}`}>
+                          {violation.threatLevel}
+                        </span>
+                      </div>
+                      <div className="violation-details">
+                        <span>Method: {violation.method}</span>
+                        {violation.confidence && <span>Confidence: {Math.round(violation.confidence * 100)}%</span>}
+                      </div>
+                      {violation.details && (
+                        <div className="violation-description">
+                          {violation.details}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {data.violations.length > 3 && (
+                    <div className="more-violations">
+                      +{data.violations.length - 3} more violations
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </>
       );
@@ -891,38 +880,28 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
 
     case "device-watch":
       const totalViolations = data.violations?.length || 0;
-      const storageDevices = data.storageDevices?.length || 0;
-      const inputDevices = data.inputDevices?.length || 0;
-      const videoDevices = data.videoDevices?.length || 0;
+      const totalDevices = (data.storageDevices?.length || 0) + (data.inputDevices?.length || 0) + (data.videoDevices?.length || 0);
+      const externalDevices = (data.inputDevices?.filter(d => d.isExternal)?.length || 0) +
+                             (data.storageDevices?.filter(d => d.isExternal)?.length || 0);
 
       return (
         <>
           <div className="data-item">
-            <span className="data-label">Violations:</span>
+            <span className="data-label">Status:</span>
             <span className={`data-value ${totalViolations > 0 ? "warning" : "normal"}`}>
-              {totalViolations}
+              {totalViolations > 0 ? `${totalViolations} Violations` : "Secure"}
             </span>
           </div>
           <div className="data-item">
-            <span className="data-label">Storage:</span>
-            <span className="data-value">{storageDevices}</span>
+            <span className="data-label">External Devices:</span>
+            <span className={`data-value ${externalDevices > 0 ? "warning" : "normal"}`}>
+              {externalDevices}
+            </span>
           </div>
           <div className="data-item">
-            <span className="data-label">Input:</span>
-            <span className="data-value">{inputDevices}</span>
+            <span className="data-label">Total Devices:</span>
+            <span className="data-value">{totalDevices}</span>
           </div>
-          <div className="data-item">
-            <span className="data-label">Video:</span>
-            <span className="data-value">{videoDevices}</span>
-          </div>
-          {data.securityProfile && (
-            <div className="data-item">
-              <span className="data-label">System:</span>
-              <span className="data-value">
-                {data.securityProfile.systemType === 1 ? "Laptop" : "Desktop"}
-              </span>
-            </div>
-          )}
           {totalViolations > 0 && (
             <div className="data-item full-width">
               <div className="violations-container">
@@ -943,6 +922,7 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
                     </div>
                     <div className="violation-details">
                       <span>Type: {violation.violationType}</span>
+                      <span>Device: {violation.deviceType || 'Unknown'}</span>
                     </div>
                     {violation.reason && (
                       <div className="violation-description">
@@ -966,34 +946,53 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
       return (
         <>
           <div className="data-item">
-            <span className="data-label">Status:</span>
+            <span className="data-label">Notifications:</span>
             <span className={`data-value ${data.isBlocked ? "normal" : "warning"}`}>
               {data.isBlocked ? "Blocked" : "Enabled"}
             </span>
           </div>
-          {data.examActive !== undefined && (
-            <div className="data-item">
-              <span className="data-label">Exam Mode:</span>
-              <span className={`data-value ${data.examActive ? "normal" : "warning"}`}>
-                {data.examActive ? "Active" : "Inactive"}
-              </span>
-            </div>
-          )}
+          <div className="data-item">
+            <span className="data-label">Exam Mode:</span>
+            <span className={`data-value ${data.examActive ? "normal" : "warning"}`}>
+              {data.examActive ? "Active" : "Inactive"}
+            </span>
+          </div>
+          {/* Show notification violations */}
           {data.eventType === "violation" && (
-            <div className="data-item">
-              <span className="data-label">Violation:</span>
-              <span className="data-value warning">
-                {data.violationType || "Settings Changed"}
-              </span>
-            </div>
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">
+                  {data.violationType || "Settings Modified"}
+                </span>
+              </div>
+              {data.reason && (
+                <div className="data-item">
+                  <span className="data-label">Details:</span>
+                  <span className="data-value warning" style={{fontSize: "0.8em"}}>
+                    {data.reason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </span>
+                </div>
+              )}
+            </>
           )}
-          {data.reason && (
-            <div className="data-item">
-              <span className="data-label">Reason:</span>
-              <span className="data-value" style={{fontSize: "0.8em"}}>
-                {data.reason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              </span>
-            </div>
+          {data.eventType === "notification-arrived" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">
+                  Notification Received
+                </span>
+              </div>
+              {data.notificationTitle && (
+                <div className="data-item">
+                  <span className="data-label">Title:</span>
+                  <span className="data-value" style={{fontSize: "0.8em"}}>
+                    {data.notificationTitle}
+                  </span>
+                </div>
+              )}
+            </>
           )}
           <div className="data-item" style={{ marginTop: "10px" }}>
             <button
@@ -1019,27 +1018,25 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
     case "clipboard-worker":
       return (
         <>
-          {/* Active Clipboard Management Status */}
           <div className="data-item">
             <span className="data-label">Protection:</span>
             <span className={`data-value ${data.activeClearingEnabled ? "normal" : "warning"}`}>
               {data.activeClearingEnabled ? "Active Clearing" : "Monitoring Only"}
             </span>
           </div>
-
           <div className="data-item">
-            <span className="data-label">Current Status:</span>
+            <span className="data-label">Status:</span>
             <span className={`data-value ${
-              data.currentStatus === 'content-detected-and-cleared' ? "normal" :
-              data.currentStatus === 'monitoring' ? "normal" : "warning"
+              data.eventType === "clipboard-cleared" ? "normal" :
+              data.eventType === "clipboard-changed" ? "warning" : "normal"
             }`}>
-              {data.currentStatus === 'content-detected-and-cleared' ? "Content Cleared" :
-               data.currentStatus === 'monitoring' ? "Clean" :
-               data.currentStatus || "Monitoring"}
+              {data.eventType === "clipboard-cleared" ? "Content Cleared" :
+               data.eventType === "clipboard-changed" ? "Content Detected" :
+               data.currentStatus === 'content-detected-and-cleared' ? "Content Cleared" :
+               "Monitoring"}
             </span>
           </div>
-
-          {/* Show active clipboard content or clearing status */}
+          {/* Show clipboard clearing actions */}
           {data.eventType === "clipboard-cleared" && (
             <>
               <div className="data-item">
@@ -1048,43 +1045,44 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
               </div>
               {data.originalContent && (
                 <div className="data-item">
-                  <span className="data-label">Detected:</span>
+                  <span className="data-label">Detected Content:</span>
                   <span className="data-value" style={{fontSize: "0.8em", maxWidth: "200px", wordBreak: "break-word"}}>
-                    {data.originalContent.length > 40 ?
-                      data.originalContent.substring(0, 40) + "..." :
+                    {data.originalContent.length > 30 ?
+                      data.originalContent.substring(0, 30) + "..." :
                       data.originalContent}
                   </span>
                 </div>
               )}
               {data.sourceApp && (
                 <div className="data-item">
-                  <span className="data-label">From App:</span>
+                  <span className="data-label">Source App:</span>
                   <span className="data-value">{data.sourceApp}</span>
                 </div>
               )}
             </>
           )}
-
-          {/* Show current clipboard content if available */}
+          {/* Show current clipboard content violations */}
           {data.eventType === "clipboard-changed" && data.contentPreview && (
             <>
-              {data.sourceApp && (
-                <div className="data-item">
-                  <span className="data-label">Source App:</span>
-                  <span className="data-value">
-                    {data.sourceApp}
-                  </span>
-                </div>
-              )}
               <div className="data-item">
-                <span className="data-label">Current Content:</span>
-                <span className="data-value"
-                      style={{fontSize: "0.85em", maxWidth: "200px", wordBreak: "break-word"}}>
-                  {data.contentPreview.length > 50 ?
-                    data.contentPreview.substring(0, 50) + "..." :
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">Content Detected</span>
+              </div>
+              <div className="data-item">
+                <span className="data-label">Content Preview:</span>
+                <span className="data-value warning"
+                      style={{fontSize: "0.8em", maxWidth: "200px", wordBreak: "break-word"}}>
+                  {data.contentPreview.length > 30 ?
+                    data.contentPreview.substring(0, 30) + "..." :
                     data.contentPreview}
                 </span>
               </div>
+              {data.sourceApp && (
+                <div className="data-item">
+                  <span className="data-label">Source App:</span>
+                  <span className="data-value">{data.sourceApp}</span>
+                </div>
+              )}
               {data.isSensitive !== undefined && (
                 <div className="data-item">
                   <span className="data-label">Sensitive:</span>
@@ -1095,22 +1093,6 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
               )}
             </>
           )}
-
-          {/* Heartbeat/monitoring status */}
-          {(!data.eventType || data.eventType === "heartbeat") && (
-            <div className="data-item">
-              <span className="data-label">Status:</span>
-              <span className="data-value normal">Monitoring</span>
-            </div>
-          )}
-
-          {/* Show clearing strategy */}
-          {data.clearingStrategy && (
-            <div className="data-item">
-              <span className="data-label">Strategy:</span>
-              <span className="data-value normal">{data.clearingStrategy}</span>
-            </div>
-          )}
         </>
       );
 
@@ -1118,17 +1100,104 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
       return (
         <>
           <div className="data-item">
-            <span className="data-label">Event:</span>
+            <span className="data-label">Focus Status:</span>
             <span className={`data-value ${
               data.eventType === "focus-lost" || data.eventType === "idle-start" ? "warning" : "normal"
             }`}>
-              {data.eventType || "monitoring"}
+              {data.eventType === "focus-lost" ? "Lost Focus" :
+               data.eventType === "idle-start" ? "User Idle" :
+               data.eventType === "focus-gained" ? "Focused" : "Active"}
             </span>
           </div>
-          {data.details?.activeApp && (
+          {/* Show focus violation details */}
+          {data.eventType === "focus-lost" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">Focus Lost</span>
+              </div>
+              {data.details?.activeApp && (
+                <div className="data-item">
+                  <span className="data-label">Switched To:</span>
+                  <span className="data-value warning">{data.details.activeApp}</span>
+                </div>
+              )}
+              {data.details?.duration && (
+                <div className="data-item">
+                  <span className="data-label">Duration:</span>
+                  <span className="data-value">{data.details.duration}s</span>
+                </div>
+              )}
+            </>
+          )}
+          {/* Show idle violation details */}
+          {data.eventType === "idle-start" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">User Idle</span>
+              </div>
+              {data.details?.idleDuration && (
+                <div className="data-item">
+                  <span className="data-label">Idle Time:</span>
+                  <span className="data-value">{data.details.idleDuration}s</span>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      );
+
+    case "recorder-overlay-watch":
+      return (
+        <>
+          <div className="data-item">
+            <span className="data-label">Status:</span>
+            <span className={`data-value ${
+              data.recordingProcesses?.length > 0 || data.overlayWindows?.length > 0 ? "warning" : "normal"
+            }`}>
+              {data.recordingProcesses?.length > 0 ? `${data.recordingProcesses.length} Recording` :
+               data.overlayWindows?.length > 0 ? `${data.overlayWindows.length} Overlays` : "Secure"}
+            </span>
+          </div>
+          {data.eventType === "recording-violation" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">Recording Detected</span>
+              </div>
+              {data.recordingProcesses && data.recordingProcesses.length > 0 && (
+                <div className="data-item">
+                  <span className="data-label">Recording Apps:</span>
+                  <span className="data-value warning">
+                    {data.recordingProcesses.slice(0, 2).map(p => p.name || p.processName).join(", ")}
+                    {data.recordingProcesses.length > 2 && ` +${data.recordingProcesses.length - 2} more`}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+          {data.eventType === "overlay-violation" && (
+            <>
+              <div className="data-item">
+                <span className="data-label">Violation:</span>
+                <span className="data-value warning">Overlay Detected</span>
+              </div>
+              {data.overlayWindows && data.overlayWindows.length > 0 && (
+                <div className="data-item">
+                  <span className="data-label">Overlay Windows:</span>
+                  <span className="data-value warning">
+                    {data.overlayWindows.slice(0, 2).map(w => w.title || w.name).join(", ")}
+                    {data.overlayWindows.length > 2 && ` +${data.overlayWindows.length - 2} more`}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+          {data.confidence && (
             <div className="data-item">
-              <span className="data-label">Active App:</span>
-              <span className="data-value">{data.details.activeApp}</span>
+              <span className="data-label">Confidence:</span>
+              <span className="data-value">{Math.round(data.confidence * 100)}%</span>
             </div>
           )}
         </>
