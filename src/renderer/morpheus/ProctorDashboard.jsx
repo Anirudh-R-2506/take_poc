@@ -812,6 +812,61 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
                   <span className="data-value">{Math.round(data.confidence * 100)}%</span>
                 </div>
               )}
+              <div className="data-item full-width">
+                <div className="violations-container">
+                  <h5>VM Detection Details:</h5>
+                  <div className="violation-item">
+                    <div className="violation-header">
+                      <strong>Virtual Machine Detected</strong>
+                      <span className="threat-badge critical">CRITICAL</span>
+                    </div>
+                    <div className="violation-evidence">
+                      <div className="evidence-details">
+                        <div className="evidence-grid">
+                          <span className="evidence-item">
+                            <span className="evidence-label">VM Type:</span>
+                            <span className="evidence-value">{data.detectedVM || 'Unknown'}</span>
+                          </span>
+                          {data.confidence && (
+                            <span className="evidence-item">
+                              <span className="evidence-label">Detection Confidence:</span>
+                              <span className="evidence-value">{Math.round(data.confidence * 100)}%</span>
+                            </span>
+                          )}
+                          {data.vmIndicators && (
+                            <span className="evidence-item">
+                              <span className="evidence-label">Indicators:</span>
+                              <span className="evidence-value">{data.vmIndicators.join(', ')}</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="risk-factors">
+                          <span className="evidence-label">Security Risks:</span>
+                          <div className="risk-factors-list">
+                            <span className="risk-factor-badge">Environment isolation</span>
+                            <span className="risk-factor-badge">Snapshots possible</span>
+                            <span className="risk-factor-badge">Evidence tampering risk</span>
+                            <span className="risk-factor-badge">Host system access</span>
+                            {data.detectedVM === 'VMware' && (
+                              <span className="risk-factor-badge">VMware tools detected</span>
+                            )}
+                            {data.detectedVM === 'VirtualBox' && (
+                              <span className="risk-factor-badge">VirtualBox environment</span>
+                            )}
+                            {data.detectedVM === 'Hyper-V' && (
+                              <span className="risk-factor-badge">Hyper-V virtualization</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="violation-description">
+                      <strong>Risk:</strong> Virtual machines allow students to manipulate the testing environment,
+                      take snapshots, access external resources through the host system, and potentially bypass security measures.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </>
@@ -845,29 +900,80 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
               </div>
               <div className="data-item full-width">
                 <div className="violations-container">
-                  <h5>Screen Sharing Violations:</h5>
-                  {data.violations.slice(0, 3).map((violation, index) => (
+                  <h5>Screen Sharing Violations ({data.violations.length}):</h5>
+                  {data.violations.slice(0, 4).map((violation, index) => (
                     <div key={index} className="violation-item">
                       <div className="violation-header">
                         <strong>{violation.appName || 'Unknown App'}</strong>
-                        <span className={`threat-badge ${violation.threatLevel?.toLowerCase()}`}>
+                        <span className={`threat-badge ${
+                          violation.threatLevel === 'CRITICAL' ? 'critical' :
+                          violation.threatLevel === 'HIGH' ? 'high' :
+                          violation.threatLevel === 'MEDIUM' ? 'medium' : 'low'
+                        }`}>
                           {violation.threatLevel}
                         </span>
                       </div>
                       <div className="violation-details">
-                        <span>Method: {violation.method}</span>
+                        <span>Method: {violation.method || 'Unknown'}</span>
+                        {violation.sessionId && <span>Session: {violation.sessionId}</span>}
+                        {violation.pid && <span>PID: {violation.pid}</span>}
                         {violation.confidence && <span>Confidence: {Math.round(violation.confidence * 100)}%</span>}
                       </div>
                       {violation.details && (
                         <div className="violation-description">
-                          {violation.details}
+                          <strong>Details:</strong> {violation.details}
+                        </div>
+                      )}
+                      {violation.violation_type && (
+                        <div className="violation-evidence">
+                          <div className="evidence-details">
+                            <div className="evidence-grid">
+                              <span className="evidence-item">
+                                <span className="evidence-label">Type:</span>
+                                <span className="evidence-value">{violation.violation_type}</span>
+                              </span>
+                              {violation.method && (
+                                <span className="evidence-item">
+                                  <span className="evidence-label">Method:</span>
+                                  <span className="evidence-value">{violation.method}</span>
+                                </span>
+                              )}
+                              {violation.appName && (
+                                <span className="evidence-item">
+                                  <span className="evidence-label">Application:</span>
+                                  <span className="evidence-value">{violation.appName}</span>
+                                </span>
+                              )}
+                              {violation.pid && (
+                                <span className="evidence-item">
+                                  <span className="evidence-label">Process ID:</span>
+                                  <span className="evidence-value">{violation.pid}</span>
+                                </span>
+                              )}
+                            </div>
+                            {violation.details && (
+                              <div className="risk-factors">
+                                <span className="evidence-label">Risk Assessment:</span>
+                                <div className="risk-factors-list">
+                                  <span className="risk-factor-badge">Screen capture active</span>
+                                  <span className="risk-factor-badge">Remote access detected</span>
+                                  {violation.method === 'SCREENCAPTUREKIT' && (
+                                    <span className="risk-factor-badge">System-level capture</span>
+                                  )}
+                                  {violation.method === 'BROWSER_WEBRTC' && (
+                                    <span className="risk-factor-badge">Browser sharing</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
                   ))}
-                  {data.violations.length > 3 && (
+                  {data.violations.length > 4 && (
                     <div className="more-violations">
-                      +{data.violations.length - 3} more violations
+                      +{data.violations.length - 4} more violations (check logs for details)
                     </div>
                   )}
                 </div>
@@ -922,18 +1028,85 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
                     </div>
                     <div className="violation-details">
                       <span>Type: {violation.violationType}</span>
-                      <span>Device: {violation.deviceType || 'Unknown'}</span>
+                      {violation.deviceType && (
+                        <span>Category: {violation.deviceType}</span>
+                      )}
+                      {violation.deviceId && (
+                        <span>ID: {violation.deviceId}</span>
+                      )}
                     </div>
                     {violation.reason && (
                       <div className="violation-description">
-                        {violation.reason}
+                        <strong>Risk:</strong> {violation.reason}
+                      </div>
+                    )}
+                    {violation.evidence && (
+                      <div className="violation-evidence">
+                        <div className="evidence-details">
+                          {(() => {
+                            // Parse evidence string to extract structured information
+                            const evidence = violation.evidence;
+                            const parts = evidence.split(', ');
+                            const structured = {};
+
+                            parts.forEach(part => {
+                              const [key, ...valueParts] = part.split(': ');
+                              if (key && valueParts.length > 0) {
+                                structured[key] = valueParts.join(': ');
+                              }
+                            });
+
+                            return (
+                              <div className="evidence-grid">
+                                {structured.Type && (
+                                  <span className="evidence-item">
+                                    <span className="evidence-label">Type:</span>
+                                    <span className="evidence-value">{structured.Type}</span>
+                                  </span>
+                                )}
+                                {structured.Device && (
+                                  <span className="evidence-item">
+                                    <span className="evidence-label">Device:</span>
+                                    <span className="evidence-value">{structured.Device}</span>
+                                  </span>
+                                )}
+                                {structured.Address && (
+                                  <span className="evidence-item">
+                                    <span className="evidence-label">Address:</span>
+                                    <span className="evidence-value">{structured.Address}</span>
+                                  </span>
+                                )}
+                                {structured.Connected && (
+                                  <span className="evidence-item">
+                                    <span className="evidence-label">Connected:</span>
+                                    <span className={`evidence-value ${structured.Connected === 'Yes' ? 'connected' : 'disconnected'}`}>
+                                      {structured.Connected}
+                                    </span>
+                                  </span>
+                                )}
+                                {structured['Risk Factors'] && (
+                                  <div className="risk-factors">
+                                    <span className="evidence-label">Risk Factors:</span>
+                                    <div className="risk-factors-list">
+                                      {structured['Risk Factors'].split(', ').map((factor, idx) => (
+                                        <span key={idx} className="risk-factor-badge">
+                                          {factor}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
                 {totalViolations > 3 && (
                   <div className="more-violations">
-                    +{totalViolations - 3} more violations
+                    +{totalViolations - 3} more violations (expand to see all)
                   </div>
                 )}
               </div>
@@ -958,41 +1131,72 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
             </span>
           </div>
           {/* Show notification violations */}
-          {data.eventType === "violation" && (
-            <>
-              <div className="data-item">
-                <span className="data-label">Violation:</span>
-                <span className="data-value warning">
-                  {data.violationType || "Settings Modified"}
-                </span>
-              </div>
-              {data.reason && (
-                <div className="data-item">
-                  <span className="data-label">Details:</span>
-                  <span className="data-value warning" style={{fontSize: "0.8em"}}>
-                    {data.reason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </span>
+          {(data.eventType === "violation" || data.eventType === "notification-arrived") && (
+            <div className="data-item full-width">
+              <div className="violations-container">
+                <h5>Notification System Violations:</h5>
+                <div className="violation-item">
+                  <div className="violation-header">
+                    <strong>
+                      {data.eventType === "violation" ? "Settings Modified" : "Notification Received"}
+                    </strong>
+                    <span className="threat-badge high">HIGH</span>
+                  </div>
+                  <div className="violation-details">
+                    <span>Type: {data.violationType || data.eventType}</span>
+                    {data.notificationTitle && <span>Source: {data.notificationTitle}</span>}
+                    {data.timestamp && <span>Time: {new Date(data.timestamp).toLocaleTimeString()}</span>}
+                  </div>
+                  {data.reason && (
+                    <div className="violation-description">
+                      <strong>Details:</strong> {data.reason.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </div>
+                  )}
+                  <div className="violation-evidence">
+                    <div className="evidence-details">
+                      <div className="evidence-grid">
+                        <span className="evidence-item">
+                          <span className="evidence-label">Event Type:</span>
+                          <span className="evidence-value">{data.eventType}</span>
+                        </span>
+                        {data.violationType && (
+                          <span className="evidence-item">
+                            <span className="evidence-label">Violation Type:</span>
+                            <span className="evidence-value">{data.violationType}</span>
+                          </span>
+                        )}
+                        {data.notificationTitle && (
+                          <span className="evidence-item">
+                            <span className="evidence-label">Notification:</span>
+                            <span className="evidence-value">{data.notificationTitle}</span>
+                          </span>
+                        )}
+                        <span className="evidence-item">
+                          <span className="evidence-label">Blocking Status:</span>
+                          <span className={`evidence-value ${data.isBlocked ? 'normal' : 'warning'}`}>
+                            {data.isBlocked ? 'Active' : 'Disabled'}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="risk-factors">
+                        <span className="evidence-label">Security Risks:</span>
+                        <div className="risk-factors-list">
+                          <span className="risk-factor-badge">Exam distraction</span>
+                          <span className="risk-factor-badge">External communication</span>
+                          {data.eventType === "violation" && (
+                            <span className="risk-factor-badge">Settings tampering</span>
+                          )}
+                          {data.notificationTitle && (
+                            <span className="risk-factor-badge">Information leakage</span>
+                          )}
+                          <span className="risk-factor-badge">Focus disruption</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </>
-          )}
-          {data.eventType === "notification-arrived" && (
-            <>
-              <div className="data-item">
-                <span className="data-label">Violation:</span>
-                <span className="data-value warning">
-                  Notification Received
-                </span>
               </div>
-              {data.notificationTitle && (
-                <div className="data-item">
-                  <span className="data-label">Title:</span>
-                  <span className="data-value" style={{fontSize: "0.8em"}}>
-                    {data.notificationTitle}
-                  </span>
-                </div>
-              )}
-            </>
+            </div>
           )}
           <div className="data-item" style={{ marginTop: "10px" }}>
             <button
@@ -1109,41 +1313,87 @@ const renderModuleSpecificData = (moduleName, data, handleResetNotificationBlock
                data.eventType === "focus-gained" ? "Focused" : "Active"}
             </span>
           </div>
-          {/* Show focus violation details */}
-          {data.eventType === "focus-lost" && (
-            <>
-              <div className="data-item">
-                <span className="data-label">Violation:</span>
-                <span className="data-value warning">Focus Lost</span>
+          {/* Show focus and idle violation details */}
+          {(data.eventType === "focus-lost" || data.eventType === "idle-start") && (
+            <div className="data-item full-width">
+              <div className="violations-container">
+                <h5>Focus & Attention Violations:</h5>
+                <div className="violation-item">
+                  <div className="violation-header">
+                    <strong>
+                      {data.eventType === "focus-lost" ? "Focus Lost" : "User Idle"}
+                    </strong>
+                    <span className={`threat-badge ${
+                      data.eventType === "focus-lost" ? 'high' : 'medium'
+                    }`}>
+                      {data.eventType === "focus-lost" ? 'HIGH' : 'MEDIUM'}
+                    </span>
+                  </div>
+                  <div className="violation-details">
+                    <span>Event: {data.eventType}</span>
+                    {data.details?.activeApp && <span>Switched To: {data.details.activeApp}</span>}
+                    {data.details?.duration && <span>Duration: {data.details.duration}s</span>}
+                    {data.details?.idleDuration && <span>Idle Time: {data.details.idleDuration}s</span>}
+                    {data.timestamp && <span>Time: {new Date(data.timestamp).toLocaleTimeString()}</span>}
+                  </div>
+                  <div className="violation-description">
+                    <strong>Impact:</strong> {
+                      data.eventType === "focus-lost"
+                        ? "Student switched away from the exam application, potentially accessing unauthorized resources."
+                        : "Student became inactive, which may indicate distraction or assistance from others."
+                    }
+                  </div>
+                  <div className="violation-evidence">
+                    <div className="evidence-details">
+                      <div className="evidence-grid">
+                        <span className="evidence-item">
+                          <span className="evidence-label">Event Type:</span>
+                          <span className="evidence-value">{data.eventType}</span>
+                        </span>
+                        {data.details?.activeApp && (
+                          <span className="evidence-item">
+                            <span className="evidence-label">Target App:</span>
+                            <span className="evidence-value">{data.details.activeApp}</span>
+                          </span>
+                        )}
+                        {data.details?.duration && (
+                          <span className="evidence-item">
+                            <span className="evidence-label">Away Duration:</span>
+                            <span className="evidence-value">{data.details.duration} seconds</span>
+                          </span>
+                        )}
+                        {data.details?.idleDuration && (
+                          <span className="evidence-item">
+                            <span className="evidence-label">Idle Duration:</span>
+                            <span className="evidence-value">{data.details.idleDuration} seconds</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="risk-factors">
+                        <span className="evidence-label">Security Concerns:</span>
+                        <div className="risk-factors-list">
+                          {data.eventType === "focus-lost" && (
+                            <>
+                              <span className="risk-factor-badge">Unauthorized app access</span>
+                              <span className="risk-factor-badge">Information lookup</span>
+                              <span className="risk-factor-badge">External communication</span>
+                            </>
+                          )}
+                          {data.eventType === "idle-start" && (
+                            <>
+                              <span className="risk-factor-badge">External assistance</span>
+                              <span className="risk-factor-badge">Distraction</span>
+                              <span className="risk-factor-badge">Time mismanagement</span>
+                            </>
+                          )}
+                          <span className="risk-factor-badge">Exam integrity risk</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {data.details?.activeApp && (
-                <div className="data-item">
-                  <span className="data-label">Switched To:</span>
-                  <span className="data-value warning">{data.details.activeApp}</span>
-                </div>
-              )}
-              {data.details?.duration && (
-                <div className="data-item">
-                  <span className="data-label">Duration:</span>
-                  <span className="data-value">{data.details.duration}s</span>
-                </div>
-              )}
-            </>
-          )}
-          {/* Show idle violation details */}
-          {data.eventType === "idle-start" && (
-            <>
-              <div className="data-item">
-                <span className="data-label">Violation:</span>
-                <span className="data-value warning">User Idle</span>
-              </div>
-              {data.details?.idleDuration && (
-                <div className="data-item">
-                  <span className="data-label">Idle Time:</span>
-                  <span className="data-value">{data.details.idleDuration}s</span>
-                </div>
-              )}
-            </>
+            </div>
           )}
         </>
       );

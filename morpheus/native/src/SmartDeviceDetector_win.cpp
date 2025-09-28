@@ -1524,24 +1524,166 @@ bool SmartDeviceDetector::DetectWindowsBluetoothDevices() {
                     std::string deviceNameLower = deviceName;
                     std::transform(deviceNameLower.begin(), deviceNameLower.end(), deviceNameLower.begin(), ::tolower);
 
-                    // Determine device type and severity
+                    // Comprehensive device classification for production-ready proctoring
                     int severity = 2; // MEDIUM by default
                     std::string deviceType = "Unknown Bluetooth Device";
-                    std::string reason = "Bluetooth device detected in strict mode";
+                    std::string reason = "Bluetooth device connected during exam";
+                    std::vector<std::string> riskFactors;
 
-                    // Classify device type for better reporting and risk assessment
+                    // === CRITICAL THREAT DEVICES (Severity 4) ===
                     if (deviceNameLower.find("headphone") != std::string::npos ||
                         deviceNameLower.find("earphone") != std::string::npos ||
                         deviceNameLower.find("earbuds") != std::string::npos ||
+                        deviceNameLower.find("earpods") != std::string::npos ||
                         deviceNameLower.find("airpods") != std::string::npos ||
-                        deviceNameLower.find("speaker") != std::string::npos ||
-                        deviceNameLower.find("audio") != std::string::npos ||
                         deviceNameLower.find("beats") != std::string::npos ||
                         deviceNameLower.find("bose") != std::string::npos ||
-                        deviceNameLower.find("sony") != std::string::npos) {
+                        deviceNameLower.find("sony") != std::string::npos ||
+                        deviceNameLower.find("sennheiser") != std::string::npos ||
+                        deviceNameLower.find("jbl") != std::string::npos ||
+                        deviceNameLower.find("skullcandy") != std::string::npos ||
+                        deviceNameLower.find("galaxy buds") != std::string::npos ||
+                        deviceNameLower.find("powerbeats") != std::string::npos ||
+                        deviceNameLower.find("soundcore") != std::string::npos ||
+                        deviceNameLower.find("jabra") != std::string::npos ||
+                        deviceNameLower.find("headset") != std::string::npos ||
+                        deviceNameLower.find("microphone") != std::string::npos ||
+                        deviceNameLower.find("mic") != std::string::npos) {
                         deviceType = "Bluetooth Audio Device";
-                        severity = 3; // HIGH - audio devices can record/transmit exam content
-                        reason = "Bluetooth audio device detected - potential for recording or assistance";
+                        severity = 4; // CRITICAL
+                        reason = "Audio device detected - high cheating risk via audio communication";
+                        riskFactors.push_back("Audio communication capability");
+                        riskFactors.push_back("Potential for receiving external assistance");
+                    }
+
+                    // === MOBILE DEVICES (Severity 4) ===
+                    else if (deviceNameLower.find("phone") != std::string::npos ||
+                             deviceNameLower.find("iphone") != std::string::npos ||
+                             deviceNameLower.find("android") != std::string::npos ||
+                             deviceNameLower.find("samsung") != std::string::npos ||
+                             deviceNameLower.find("galaxy") != std::string::npos ||
+                             deviceNameLower.find("pixel") != std::string::npos ||
+                             deviceNameLower.find("oneplus") != std::string::npos ||
+                             deviceNameLower.find("huawei") != std::string::npos ||
+                             deviceNameLower.find("xiaomi") != std::string::npos ||
+                             deviceNameLower.find("oppo") != std::string::npos ||
+                             deviceNameLower.find("vivo") != std::string::npos ||
+                             deviceNameLower.find("nokia") != std::string::npos ||
+                             deviceNameLower.find("motorola") != std::string::npos ||
+                             deviceNameLower.find("lg mobile") != std::string::npos ||
+                             deviceNameLower.find("htc") != std::string::npos) {
+                        deviceType = "Mobile Device";
+                        severity = 4; // CRITICAL
+                        reason = "Mobile device detected - internet access and communication capability";
+                        riskFactors.push_back("Internet access");
+                        riskFactors.push_back("Camera and recording capability");
+                        riskFactors.push_back("Communication apps");
+                        riskFactors.push_back("Information lookup capability");
+                    }
+
+                    // === TABLETS (Severity 4) ===
+                    else if (deviceNameLower.find("tablet") != std::string::npos ||
+                             deviceNameLower.find("ipad") != std::string::npos ||
+                             deviceNameLower.find("surface") != std::string::npos ||
+                             deviceNameLower.find("galaxy tab") != std::string::npos ||
+                             deviceNameLower.find("kindle") != std::string::npos) {
+                        deviceType = "Tablet Device";
+                        severity = 4; // CRITICAL
+                        reason = "Tablet detected - large screen device with internet and apps";
+                        riskFactors.push_back("Large screen for information display");
+                        riskFactors.push_back("Internet access");
+                        riskFactors.push_back("Application ecosystem");
+                    }
+
+                    // === SMARTWATCHES (Severity 4) ===
+                    else if (deviceNameLower.find("watch") != std::string::npos ||
+                             deviceNameLower.find("apple watch") != std::string::npos ||
+                             deviceNameLower.find("galaxy watch") != std::string::npos ||
+                             deviceNameLower.find("fitbit") != std::string::npos ||
+                             deviceNameLower.find("garmin") != std::string::npos ||
+                             deviceNameLower.find("fossil") != std::string::npos ||
+                             deviceNameLower.find("wear os") != std::string::npos ||
+                             deviceNameLower.find("amazfit") != std::string::npos) {
+                        deviceType = "Smartwatch";
+                        severity = 4; // CRITICAL
+                        reason = "Smartwatch detected - communication and notification capability";
+                        riskFactors.push_back("Message and notification access");
+                        riskFactors.push_back("Internet connectivity");
+                        riskFactors.push_back("Voice communication capability");
+                    }
+
+                    // === SPEAKERS (Severity 3) ===
+                    else if (deviceNameLower.find("speaker") != std::string::npos ||
+                             deviceNameLower.find("soundbar") != std::string::npos ||
+                             deviceNameLower.find("echo") != std::string::npos ||
+                             deviceNameLower.find("alexa") != std::string::npos ||
+                             deviceNameLower.find("google home") != std::string::npos ||
+                             deviceNameLower.find("homepod") != std::string::npos ||
+                             deviceNameLower.find("sonos") != std::string::npos) {
+                        deviceType = "Bluetooth Speaker/Smart Speaker";
+                        severity = 3; // HIGH
+                        reason = "Speaker detected - potential for audio assistance";
+                        riskFactors.push_back("Audio output capability");
+                        riskFactors.push_back("Potential voice assistant features");
+                    }
+
+                    // === GAMING DEVICES (Severity 3) ===
+                    else if (deviceNameLower.find("controller") != std::string::npos ||
+                             deviceNameLower.find("gamepad") != std::string::npos ||
+                             deviceNameLower.find("joystick") != std::string::npos ||
+                             deviceNameLower.find("xbox") != std::string::npos ||
+                             deviceNameLower.find("playstation") != std::string::npos ||
+                             deviceNameLower.find("nintendo") != std::string::npos ||
+                             deviceNameLower.find("steam") != std::string::npos ||
+                             deviceNameLower.find("gaming") != std::string::npos) {
+                        deviceType = "Gaming Controller";
+                        severity = 3; // HIGH
+                        reason = "Gaming device detected - potential distraction or hidden communication";
+                        riskFactors.push_back("Gaming distraction risk");
+                        riskFactors.push_back("Potential hidden communication features");
+                    }
+
+                    // === SMART DEVICES/IOT (Severity 3) ===
+                    else if (deviceNameLower.find("smart") != std::string::npos ||
+                             deviceNameLower.find("iot") != std::string::npos ||
+                             deviceNameLower.find("home") != std::string::npos ||
+                             deviceNameLower.find("hub") != std::string::npos ||
+                             deviceNameLower.find("bridge") != std::string::npos ||
+                             deviceNameLower.find("beacon") != std::string::npos ||
+                             deviceNameLower.find("tile") != std::string::npos ||
+                             deviceNameLower.find("airtag") != std::string::npos) {
+                        deviceType = "Smart Device/IoT";
+                        severity = 3; // HIGH
+                        reason = "Smart device detected - potential connectivity and automation features";
+                        riskFactors.push_back("Network connectivity");
+                        riskFactors.push_back("Automation capabilities");
+                    }
+
+                    // === CAMERAS (Severity 4) ===
+                    else if (deviceNameLower.find("camera") != std::string::npos ||
+                             deviceNameLower.find("webcam") != std::string::npos ||
+                             deviceNameLower.find("gopro") != std::string::npos ||
+                             deviceNameLower.find("canon") != std::string::npos ||
+                             deviceNameLower.find("nikon") != std::string::npos ||
+                             deviceNameLower.find("sony camera") != std::string::npos) {
+                        deviceType = "Camera Device";
+                        severity = 4; // CRITICAL
+                        reason = "Camera device detected - recording capability";
+                        riskFactors.push_back("Video recording capability");
+                        riskFactors.push_back("Potential exam content capture");
+                    }
+
+                    // === HEALTH DEVICES (Severity 2) ===
+                    else if (deviceNameLower.find("glucose") != std::string::npos ||
+                             deviceNameLower.find("insulin") != std::string::npos ||
+                             deviceNameLower.find("hearing aid") != std::string::npos ||
+                             deviceNameLower.find("pacemaker") != std::string::npos ||
+                             deviceNameLower.find("medical") != std::string::npos ||
+                             deviceNameLower.find("health") != std::string::npos) {
+                        deviceType = "Medical Device";
+                        severity = 2; // MEDIUM - Medical devices may be necessary
+                        reason = "Medical device detected - may be medically necessary";
+                        riskFactors.push_back("Medical necessity consideration");
                     }
                     else if (deviceNameLower.find("mouse") != std::string::npos ||
                              deviceNameLower.find("keyboard") != std::string::npos ||
@@ -1577,23 +1719,6 @@ bool SmartDeviceDetector::DetectWindowsBluetoothDevices() {
                             }
                         }
                     }
-                    else if (deviceNameLower.find("phone") != std::string::npos ||
-                             deviceNameLower.find("tablet") != std::string::npos ||
-                             deviceNameLower.find("mobile") != std::string::npos ||
-                             deviceNameLower.find("iphone") != std::string::npos ||
-                             deviceNameLower.find("ipad") != std::string::npos ||
-                             deviceNameLower.find("android") != std::string::npos) {
-                        deviceType = "Bluetooth Mobile Device";
-                        severity = 4; // CRITICAL - mobile devices are high risk
-                        reason = "Bluetooth mobile device detected - high cheating risk";
-                    }
-                    else if (deviceNameLower.find("watch") != std::string::npos ||
-                             deviceNameLower.find("fitness") != std::string::npos ||
-                             deviceNameLower.find("band") != std::string::npos) {
-                        deviceType = "Bluetooth Wearable Device";
-                        severity = 3; // HIGH - wearables can have communication features
-                        reason = "Bluetooth wearable device detected - potential communication risk";
-                    }
 
                     DeviceViolation violation;
                     violation.deviceId = "BT_" + deviceAddress;
@@ -1601,9 +1726,19 @@ bool SmartDeviceDetector::DetectWindowsBluetoothDevices() {
                     violation.violationType = "bluetooth-device";
                     violation.severity = severity;
                     violation.reason = reason;
-                    violation.evidence = "Type: " + deviceType + ", Device: " + deviceName +
-                                       ", Address: " + deviceAddress + ", Connected: " +
-                                       (deviceInfo.fConnected ? "Yes" : "No");
+
+                    // Enhanced evidence with risk factors
+                    std::string evidence = "Type: " + deviceType + ", Device: " + deviceName +
+                                         ", Address: " + deviceAddress + ", Connected: " +
+                                         (deviceInfo.fConnected ? "Yes" : "No");
+                    if (!riskFactors.empty()) {
+                        evidence += ", Risk Factors: ";
+                        for (size_t i = 0; i < riskFactors.size(); ++i) {
+                            evidence += riskFactors[i];
+                            if (i < riskFactors.size() - 1) evidence += ", ";
+                        }
+                    }
+                    violation.evidence = evidence;
                     violation.persistent = true;
 
                     activeViolations_.push_back(violation);
